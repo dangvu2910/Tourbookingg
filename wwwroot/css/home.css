@@ -10,8 +10,7 @@
 }
 
 .home-page {
-    width: 100vw;
-    margin-left: calc(50% - 50vw);
+    width: 100%;
     color: var(--voyager-text);
     background: linear-gradient(180deg, #f9fbff 0%, #ffffff 35%, #f5f7fb 100%);
     font-family: 'Manrope', sans-serif;
@@ -49,6 +48,31 @@
 
 .hero-slide.is-active {
     display: block;
+}
+
+.hero-empty-state {
+    min-height: 540px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px 110px;
+    text-align: center;
+}
+
+.hero-empty-state h1 {
+    margin: 0 0 12px;
+    color: var(--voyager-ink);
+}
+
+.hero-empty-state p {
+    margin: 0;
+    color: var(--voyager-muted);
+}
+
+.hero-slider.is-empty .hero-nav,
+.hero-slider.is-empty .hero-dots {
+    display: none;
 }
 
 .hero-overlay {

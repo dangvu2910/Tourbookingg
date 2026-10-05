@@ -67,7 +67,7 @@
 <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" />
 
 <div class="home-page">
-    <section class="hero-slider" aria-label="Tour nổi bật">
+    <section class="hero-slider @(heroSlides.Count == 0 ? "is-empty" : "")" aria-label="Tour nổi bật">
         <div class="hero-slider-track">
             @for (var i = 0; i < heroSlides.Count; i++)
             {
@@ -91,6 +91,13 @@
                 </article>
             }
         </div>
+        @if (heroSlides.Count == 0)
+        {
+            <div class="hero-empty-state" role="status">
+                <h1>Chưa có tour để hiển thị</h1>
+                <p>Tour sẽ xuất hiện tại đây khi được thêm vào hệ thống.</p>
+            </div>
+        }
         <button class="hero-nav is-prev" type="button" aria-label="Trước">‹</button>
         <button class="hero-nav is-next" type="button" aria-label="Sau">›</button>
         <div class="hero-dots" role="tablist" aria-label="Chọn slide">
