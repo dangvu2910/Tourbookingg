@@ -28,6 +28,7 @@
             <form asp-action="Booking" method="post" class="booking-card" id="bookingForm">
                 @Html.AntiForgeryToken()
                 <input type="hidden" asp-for="TourId" />
+                <input type="hidden" asp-for="RequestId" />
                 <div class="card-title">
                     <span class="card-icon">◎</span>
                     <div>

@@ -91,6 +91,8 @@ namespace Tourbooking.Controllers
             var lookupEmail = !string.IsNullOrWhiteSpace(user?.Email) ? user!.Email : null;
 
             var ticketsQuery = _context.ContactInquiries.AsNoTracking().AsQueryable();
+            var ownerId = user?.Id;
+            ticketsQuery = ticketsQuery.Where(c => ownerId != null && c.UserId == ownerId);
             if (!string.IsNullOrWhiteSpace(lookupEmail))
             {
                 ticketsQuery = ticketsQuery.Where(c => c.Email == lookupEmail);
@@ -161,6 +163,8 @@ namespace Tourbooking.Controllers
                 : user?.Email;
 
             var ticketsQuery = _context.ContactInquiries.AsNoTracking().AsQueryable();
+            var ownerId = user?.Id;
+            ticketsQuery = ticketsQuery.Where(c => ownerId != null && c.UserId == ownerId);
             if (!string.IsNullOrWhiteSpace(lookupEmail))
             {
                 ticketsQuery = ticketsQuery.Where(c => c.Email == lookupEmail);
@@ -188,6 +192,7 @@ namespace Tourbooking.Controllers
             };
         }
 
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> ContactDetails(int id)
         {
@@ -200,6 +205,8 @@ namespace Tourbooking.Controllers
             {
                 return NotFound();
             }
+
+            if (!User.IsInRole("Admin") && ticket.UserId != _userManager.GetUserId(User)) return Forbid();
 
             var replies = await _context.ContactInquiryReplies
                 .AsNoTracking()
@@ -238,6 +245,7 @@ namespace Tourbooking.Controllers
             {
                 return Challenge();
             }
+            if (!User.IsInRole("Admin") && ticket.UserId != user.Id) return Forbid();
 
             var reply = new ContactInquiryReply
             {
@@ -307,6 +315,15 @@ namespace Tourbooking.Controllers
 
             var paymentMethod = "BankTransfer";
 
+            if (model.RequestId == Guid.Empty) ModelState.AddModelError(nameof(model.RequestId), "Mã yêu cầu không hợp lệ.");
+            if (model.TravelDate?.Date < DateTime.Today.AddDays(1)) ModelState.AddModelError(nameof(model.TravelDate), "Ngày khởi hành phải từ ngày mai.");
+            var existing = await _context.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.RequestId == model.RequestId);
+            if (existing != null)
+            {
+                if (existing.UserId != user.Id) return Conflict();
+                return RedirectToAction(nameof(Payment), new { bookingId = existing.BookingId });
+            }
+
             if (!ModelState.IsValid)
             {
                 model.TourName = tour.Name;
@@ -323,6 +340,7 @@ namespace Tourbooking.Controllers
 
             var booking = new Booking
             {
+                RequestId = model.RequestId,
                 TourId = tour.TourId,
                 UserId = user.Id,
                 FullName = model.FullName.Trim(),
@@ -355,7 +373,14 @@ namespace Tourbooking.Controllers
 
             _context.Bookings.Add(booking);
             _context.Payments.Add(payment);
-            await _context.SaveChangesAsync();
+            try { await _context.SaveChangesAsync(); }
+            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException sql && sql.Number is 2601 or 2627)
+            {
+                _context.ChangeTracker.Clear();
+                var duplicate = await _context.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.RequestId == model.RequestId && b.UserId == user.Id);
+                if (duplicate == null) throw;
+                return RedirectToAction(nameof(Payment), new { bookingId = duplicate.BookingId });
+            }
 
             if (string.IsNullOrWhiteSpace(payment.BankReference))
             {
@@ -493,12 +518,14 @@ namespace Tourbooking.Controllers
             }
 
             var code = string.IsNullOrWhiteSpace(transactionCode) ? null : transactionCode.Trim();
+            if (booking.Status == "Confirmed" || payment.Status is "Paid" or "Processing")
+                return RedirectToAction("Bookings", "Account");
+            if (code?.Length > 80) return BadRequest("Mã giao dịch tối đa 80 ký tự.");
             if (!string.IsNullOrWhiteSpace(code))
             {
                 payment.TransactionCode = code;
             }
 
-            payment.PaidAt = DateTime.UtcNow;
             payment.Status = "Processing";
 
             if (!string.Equals(booking.Status, "Confirmed", StringComparison.OrdinalIgnoreCase))

@@ -4,6 +4,9 @@ namespace Tourbooking.Models;
 
 public class Booking
 {
+    [Timestamp]
+    public byte[] Version { get; set; } = [];
+    public Guid? RequestId { get; set; }
     [Key]
     public int BookingId { get; set; }
 

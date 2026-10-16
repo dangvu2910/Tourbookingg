@@ -8,3 +8,8 @@ artifacts/
 
 *.cache
 appsettings.Development.json
+.env
+.keys/
+backups/
+**/TestResults/
+.tools/

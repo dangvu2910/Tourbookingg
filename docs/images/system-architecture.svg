@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title description">
+  <title id="title">Kiến trúc Tourbooking và các cổng kết nối</title>
+  <desc id="description">Người dùng truy cập Gateway qua localhost 8080. Gateway gọi Identity, Catalog, Booking và Notification bằng HTTP cổng 8080 trong Docker. Booking và Notification giao tiếp qua RabbitMQ cổng 5672. Các dịch vụ dùng SQL Server cổng 1433. Giao diện quản trị RabbitMQ được mở trên localhost 15672.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker>
+    <marker id="event" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#b45309"/></marker>
+    <style>
+      text { font-family: 'Segoe UI', Arial, sans-serif; fill: #0f172a; text-anchor: middle; }
+      .name { font-size: 21px; font-weight: 700; }
+      .body { font-size: 17px; }
+      .small { font-size: 15px; fill: #475569; }
+      .label { font-size: 16px; font-weight: 600; paint-order: stroke; stroke: #f8fafc; stroke-width: 7px; stroke-linejoin: round; }
+      .line { fill: none; stroke: #475569; stroke-width: 2; marker-end: url(#arrow); }
+      .eventline { fill: none; stroke: #b45309; stroke-width: 2.5; marker-end: url(#event); }
+      .box { fill: #fff; stroke: #94a3b8; stroke-width: 1.5; }
+    </style>
+  </defs>
+  <rect width="1400" height="900" rx="16" fill="#f8fafc"/>
+  <rect x="30" y="145" width="1340" height="710" rx="16" fill="#eff6ff" stroke="#93c5fd" stroke-dasharray="7 5"/>
+  <text x="195" y="175" class="small">MẠNG NỘI BỘ DOCKER COMPOSE</text>
+
+  <rect x="550" y="25" width="300" height="75" rx="10" class="box"/>
+  <text x="700" y="55" class="name">Người dùng / Admin</text>
+  <text x="700" y="80" class="body">Trình duyệt web</text>
+  <path d="M700 100 V195" class="line"/>
+  <text x="700" y="126" class="label">HTTP · localhost:8080</text>
+  <text x="700" y="148" class="small">Host 8080 → Gateway 8080</text>
+
+  <rect x="550" y="195" width="300" height="80" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="700" y="227" class="name">Cổng API · Gateway</text>
+  <text x="700" y="254" class="body">YARP · gateway:8080</text>
+  <path d="M700 275 V300 H210 V350" class="line"/>
+  <path d="M700 275 V300 H530 V350" class="line"/>
+  <path d="M700 275 V300 H850 V350" class="line"/>
+  <path d="M700 275 V300 H1170 V350" class="line"/>
+  <text x="210" y="331" class="label">HTTP :8080</text>
+  <text x="530" y="331" class="label">HTTP :8080</text>
+  <text x="850" y="331" class="label">HTTP :8080</text>
+  <text x="1170" y="331" class="label">HTTP :8080</text>
+
+  <rect x="70" y="350" width="280" height="100" rx="10" class="box"/>
+  <text x="210" y="381" class="name">Dịch vụ Người dùng</text>
+  <text x="210" y="408" class="body">Identity · identity:8080</text>
+  <text x="210" y="433" class="small">Tài khoản, đăng nhập, vai trò</text>
+  <rect x="390" y="350" width="280" height="100" rx="10" class="box"/>
+  <text x="530" y="381" class="name">Dịch vụ Tour</text>
+  <text x="530" y="408" class="body">Catalog · catalog:8080</text>
+  <text x="530" y="433" class="small">Danh mục và quản lý tour</text>
+  <rect x="710" y="350" width="280" height="100" rx="10" class="box"/>
+  <text x="850" y="381" class="name">Đặt tour / Thanh toán</text>
+  <text x="850" y="408" class="body">Booking · booking:8080</text>
+  <text x="850" y="433" class="small">Booking, payment, outbox</text>
+  <rect x="1030" y="350" width="280" height="100" rx="10" class="box"/>
+  <text x="1170" y="381" class="name">Dịch vụ Thông báo</text>
+  <text x="1170" y="408" class="body">Notification · notification:8080</text>
+  <text x="1170" y="433" class="small">Consumer và API thông báo</text>
+
+  <path d="M850 450 V510" class="eventline"/>
+  <text x="850" y="483" class="label">Publish · AMQP :5672</text>
+  <rect x="700" y="510" width="300" height="85" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="850" y="541" class="name">RabbitMQ</text>
+  <text x="850" y="567" class="body">rabbitmq:5672 · sự kiện</text>
+  <text x="850" y="587" class="small">Exchange: tourbooking.events</text>
+  <path d="M1000 552 H1070 V473 H1170 V450" class="eventline"/>
+  <text x="1140" y="519" class="label">Consume / ACK</text>
+  <text x="1140" y="542" class="label">AMQP :5672</text>
+
+  <rect x="970" y="25" width="360" height="75" rx="10" class="box"/>
+  <text x="1150" y="55" class="name">Quản trị RabbitMQ</text>
+  <text x="1150" y="80" class="body">HTTP · localhost:15672</text>
+  <path d="M1330 62 H1355 V630 H1020 V585 H1000" class="line" stroke-dasharray="6 4"/>
+  <text x="1150" y="124" class="small">Host 15672 → RabbitMQ 15672</text>
+
+  <rect x="60" y="660" width="1280" height="175" rx="12" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="170" y="695" class="name">SQL Server</text>
+  <text x="170" y="722" class="body">sqlserver:1433</text>
+  <text x="170" y="747" class="small">TDS / TCP nội bộ</text>
+  <path d="M210 450 V625 H350 V724" class="line"/>
+  <text x="210" y="483" class="label">SQL :1433</text>
+  <path d="M530 450 V724" class="line"/>
+  <text x="530" y="483" class="label">SQL :1433</text>
+  <path d="M735 450 V470 H680 V625 H670 V724" class="line"/>
+  <text x="645" y="624" class="label">SQL :1433</text>
+  <path d="M1250 450 V724" class="line"/>
+  <text x="1250" y="624" class="label">SQL :1433</text>
+
+  <path d="M290 738 C290 713 730 713 730 738 V794 C730 819 290 819 290 794 Z" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
+  <ellipse cx="510" cy="738" rx="220" ry="18" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="510" y="778" class="name">TourBookingDb</text>
+  <text x="510" y="801" class="small">Dùng chung: Identity, Catalog, Booking</text>
+  <path d="M970 738 C970 713 1320 713 1320 738 V794 C1320 819 970 819 970 794 Z" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
+  <ellipse cx="1145" cy="738" rx="175" ry="18" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="1145" y="778" class="name">TourBookingNotifications</text>
+  <text x="1145" y="801" class="small">Database riêng của Notification</text>
+  <text x="700" y="878" class="body">Mũi tên: luồng request / dữ liệu. Cổng 8080 của mỗi dịch vụ nằm trong container riêng.</text>
+</svg>

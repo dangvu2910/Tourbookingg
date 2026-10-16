@@ -1,0 +1,153 @@
+name: tourbooking-distributed
+
+x-app-env: &app-env
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__DefaultConnection: Server=sqlserver;Database=TourBookingDb;User Id=sa;Password=${SQL_PASSWORD:?Run scripts/Initialize-Environment.ps1};TrustServerCertificate=True
+  RabbitMQ__Enabled: "true"
+  RabbitMQ__Host: rabbitmq
+  RabbitMQ__Username: tourbooking
+  RabbitMQ__Password: ${RABBITMQ_PASSWORD:?Run scripts/Initialize-Environment.ps1}
+  DataProtection__KeysPath: /keys
+  Https__Redirect: "false"
+  Service__TrustGateway: "true"
+  Database__Initialize: "false"
+  Services__notification: http://notification:8080
+  Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
+
+x-app: &app
+  restart: unless-stopped
+  volumes:
+    - auth-keys:/keys
+  healthcheck:
+    test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; head -1 <&3 | grep -q \"200\"'"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 30s
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_PASSWORD:?Run scripts/Initialize-Environment.ps1}
+    volumes:
+      - sql-data:/var/opt/mssql
+      - sql-backups:/var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: tourbooking
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run scripts/Initialize-Environment.ps1}
+    ports:
+      - "127.0.0.1:15672:15672"
+      - "127.0.0.1:5672:5672"
+    volumes:
+      - rabbit-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  identity:
+    <<: *app
+    build:
+      context: .
+      args: { SERVICE: Identity }
+    environment:
+      <<: *app-env
+      Database__Initialize: "true"
+      Database__SeedDemo: "true"
+      AdminUser__Email: ${ADMIN_EMAIL:-admin@tourbooking.local}
+      AdminUser__Password: ${ADMIN_PASSWORD:?Run scripts/Initialize-Environment.ps1}
+    depends_on:
+      sqlserver: { condition: service_healthy }
+
+  catalog:
+    <<: *app
+    build:
+      context: .
+      args: { SERVICE: Catalog }
+    environment:
+      <<: *app-env
+    volumes:
+      - auth-keys:/keys
+      - tour-images:/app/wwwroot/images
+    depends_on:
+      identity: { condition: service_healthy }
+
+  booking:
+    <<: *app
+    build:
+      context: .
+      args: { SERVICE: Booking }
+    environment:
+      <<: *app-env
+    depends_on:
+      identity: { condition: service_healthy }
+
+  notification:
+    <<: *app
+    build:
+      context: .
+      args: { SERVICE: Notification }
+    environment:
+      <<: *app-env
+      ConnectionStrings__Notifications: Server=sqlserver;Database=TourBookingNotifications;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
+    depends_on:
+      sqlserver: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  gateway:
+    <<: *app
+    build:
+      context: .
+      args: { SERVICE: Gateway }
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      Services__identity: http://identity:8080
+      Services__catalog: http://catalog:8080
+      Services__booking: http://booking:8080
+      Services__notification: http://notification:8080
+    depends_on:
+      identity: { condition: service_healthy }
+      catalog: { condition: service_healthy }
+      booking: { condition: service_healthy }
+      notification: { condition: service_healthy }
+
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      target: source
+    command: ["dotnet", "test", "tests/RabbitMq.Tests/RabbitMq.Tests.csproj", "--logger", "console;verbosity=normal"]
+    environment:
+      TOURBOOKING_URL: http://gateway:8080
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: tourbooking
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      TEST_DB: Server=sqlserver;Database=TourBookingDb;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
+      TEST_NOTIFICATION_DB: Server=sqlserver;Database=TourBookingNotifications;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
+      TEST_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@tourbooking.local}
+      TEST_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      gateway: { condition: service_healthy }
+
+volumes:
+  sql-data:
+  sql-backups:
+  rabbit-data:
+  auth-keys:
+  tour-images:

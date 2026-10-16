@@ -1,0 +1,23 @@
+@model List<Tourbooking.Controllers.NotificationItem>
+@{ ViewData["Title"] = "Thông báo"; }
+<section class="py-4">
+    <h1>Thông báo của bạn</h1>
+    <p>Cập nhật từ các yêu cầu đặt tour, thanh toán và tư vấn.</p>
+    @if (ViewBag.Unavailable == true)
+    {
+        <div class="alert alert-warning">Dịch vụ thông báo đang kết nối lại. Bạn có thể tiếp tục đặt tour và quay lại sau.</div>
+    }
+    else if (Model.Count == 0)
+    {
+        <p>Chưa có thông báo mới. Thông báo có thể cần vài giây để xuất hiện.</p>
+    }
+    <div class="list-group">
+    @foreach (var notification in Model)
+    {
+        <article class="list-group-item py-3">
+            <p class="mb-1">@notification.Message</p>
+            <small class="text-muted">@notification.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</small>
+        </article>
+    }
+    </div>
+</section>

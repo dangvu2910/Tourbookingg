@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="920" viewBox="0 0 1400 920">
+<title>Sơ đồ kiến trúc hệ thống Tour Booking</title>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#262626"/></marker>
+<style>text{font-family:'Segoe UI',Arial,sans-serif;text-anchor:middle;fill:#111;font-size:19px}.title{font-size:28px;font-weight:700}.name{font-size:22px;font-weight:600}.small{font-size:17px}.box{fill:#fafafa;stroke:#262626;stroke-width:1.6}.line{fill:none;stroke:#262626;stroke-width:1.7;marker-end:url(#a)}.label{font-size:17px;paint-order:stroke;stroke:white;stroke-width:7px;stroke-linejoin:round}</style>
+</defs>
+<rect width="1400" height="920" fill="white"/>
+<text x="700" y="40" class="title">SƠ ĐỒ KIẾN TRÚC HỆ THỐNG TOUR BOOKING</text>
+<rect x="575" y="70" width="250" height="85" class="box"/>
+<text x="700" y="104" class="name">Người dùng Web</text><text x="700" y="132">Khách hàng / Quản trị viên</text>
+<path d="M700 155 V245" class="line"/><text x="700" y="204" class="label">HTTP · localhost:8080</text>
+<rect x="535" y="245" width="330" height="90" class="box"/>
+<text x="700" y="280" class="name">Cổng API (API Gateway)</text><text x="700" y="310">YARP · gateway:8080</text>
+<path d="M635 335 L190 425" class="line"/><path d="M680 335 L530 425" class="line"/><path d="M720 335 L870 425" class="line"/><path d="M765 335 L1210 425" class="line"/>
+<text x="330" y="370" class="label">HTTP :8080</text><text x="565" y="390" class="label">HTTP :8080</text><text x="835" y="390" class="label">HTTP :8080</text><text x="1070" y="370" class="label">HTTP :8080</text>
+<rect x="45" y="425" width="290" height="90" class="box"/><text x="190" y="460" class="name">Dịch vụ Người dùng</text><text x="190" y="489">Identity · identity:8080</text>
+<rect x="385" y="425" width="290" height="90" class="box"/><text x="530" y="460" class="name">Dịch vụ Tour du lịch</text><text x="530" y="489">Catalog · catalog:8080</text>
+<rect x="725" y="425" width="290" height="90" class="box"/><text x="870" y="460" class="name">Đặt tour / Thanh toán</text><text x="870" y="489">Booking · booking:8080</text>
+<rect x="1065" y="425" width="290" height="90" class="box"/><text x="1210" y="460" class="name">Dịch vụ Thông báo</text><text x="1210" y="489">Notification · :8080</text>
+<path d="M190 515 L350 735" class="line"/><path d="M530 515 V735" class="line"/><path d="M785 515 L665 735" class="line"/>
+<text x="245" y="620" class="label">SQL / TCP :1433</text><text x="530" y="620" class="label">SQL / TCP :1433</text><text x="720" y="670" class="label">SQL :1433</text>
+<path d="M1250 515 V735" class="line"/><text x="1250" y="680" class="label">SQL :1433</text>
+<path d="M925 515 V585" class="line"/><text x="925" y="556" class="label">Publish · AMQP :5672</text>
+<rect x="805" y="585" width="300" height="85" class="box"/><text x="955" y="619" class="name">RabbitMQ</text><text x="955" y="647">rabbitmq:5672</text>
+<path d="M1105 625 H1160 V515" class="line"/><text x="1117" y="550" class="label">Consume / ACK</text><text x="1117" y="574" class="label">AMQP :5672</text>
+<text x="955" y="700" class="small">Quản trị: http://localhost:15672</text>
+<path d="M275 755 C275 725 755 725 755 755 V815 C755 845 275 845 275 815 Z" class="box"/><ellipse cx="515" cy="755" rx="240" ry="22" class="box"/>
+<text x="515" y="795" class="name">CSDL TourBookingDb</text><text x="515" y="822" class="small">Dùng chung: Người dùng · Tour · Booking · Payment</text>
+<path d="M965 755 C965 725 1375 725 1375 755 V815 C1375 845 965 845 965 815 Z" class="box"/><ellipse cx="1170" cy="755" rx="205" ry="22" class="box"/>
+<text x="1170" y="795" class="name">CSDL Thông báo</text><text x="1170" y="822" class="small">TourBookingNotifications</text>
+<text x="700" y="878" class="small">Hai database trên cùng SQL Server: sqlserver:1433 · Cổng 8080 nằm trong từng container.</text>
+<text x="700" y="905" class="small">Cấu hình đang chạy: HTTP 8080 · Thanh toán thuộc Booking · Chưa có bộ cân bằng tải riêng.</text>
+</svg>

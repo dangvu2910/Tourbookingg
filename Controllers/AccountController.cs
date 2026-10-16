@@ -64,13 +64,7 @@ namespace Tourbooking.Controllers
                         return RedirectToAction("Dashboard", "Admin");
                     }
 
-                    var adminEmail = _configuration["AdminUser:Email"];
-                    if (!string.IsNullOrWhiteSpace(adminEmail)
-                        && string.Equals(adminEmail, user.Email, StringComparison.OrdinalIgnoreCase))
-                    {
-                        await _userManager.AddToRoleAsync(user, "Admin");
-                        return RedirectToAction("Dashboard", "Admin");
-                    }
+
                 }
 
                 if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))

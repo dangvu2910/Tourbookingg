@@ -1,0 +1,13 @@
+**/bin
+**/obj
+.git
+.vs
+.env
+**/appsettings.Development.json
+.keys
+.tools
+backups
+artifacts
+*.docx
+*.pdf
+tests/TestResults

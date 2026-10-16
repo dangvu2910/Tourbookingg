@@ -1,4 +1,4 @@
-﻿@model IEnumerable<Tour>
+@model IEnumerable<Tour>
 
 @{
     ViewData["Title"] = "Tour - Voyager";
@@ -14,26 +14,6 @@
     var minPriceValue = 500000;
     var maxRangeValue = 10000000;
     var vnd = CultureInfo.GetCultureInfo("vi-VN");
-
-    string TruncateDescription(string? text, int maxLength = 120)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return string.Empty;
-        }
-
-        var normalized = text.Trim();
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, "(\\.\\s*){3,}|…", string.Empty);
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, "\\s{2,}", " ").Trim();
-
-        if (normalized.Length <= maxLength)
-        {
-            return normalized;
-        }
-
-        var cut = normalized[..maxLength].TrimEnd();
-        return cut + "...";
-    }
 
     // GÁN ẢNH TĨNH TẠI ĐÂY (nếu bạn muốn):
     // Ví dụ: staticTourImage1 = "/images/tours/tour-1.jpg";

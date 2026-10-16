@@ -4,6 +4,8 @@ namespace Tourbooking.Models;
 
 public class Payment
 {
+    [Timestamp]
+    public byte[] Version { get; set; } = [];
     [Key]
     public int PaymentId { get; set; }
 

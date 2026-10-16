@@ -4,6 +4,7 @@ namespace Tourbooking.ViewModels;
 
 public class BookingCreateViewModel
 {
+    public Guid RequestId { get; set; } = Guid.NewGuid();
     public int TourId { get; set; }
     public string TourName { get; set; } = string.Empty;
     public string TourLocation { get; set; } = string.Empty;

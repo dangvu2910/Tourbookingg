@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Tourbooking.ViewModels;
 
@@ -9,7 +9,6 @@ public class ProfileViewModel
 
     [Required(ErrorMessage = "Vui lòng nhập email.")]
     [EmailAddress(ErrorMessage = "Email không hợp lệ.")]
-    [RegularExpression("^[a-zA-Z0-9._%+-]+@gmail\\.com$", ErrorMessage = "Email phải có dạng xxx@gmail.com.")]
     [Display(Name = "Email liên hệ")]
     public string Email { get; set; } = string.Empty;
 

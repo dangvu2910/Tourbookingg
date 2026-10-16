@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -164,7 +164,7 @@ namespace Tourbooking.Controllers
                             Directory.CreateDirectory(uploadsFolder);
                         }
 
-                        string uniqueFileName = Guid.NewGuid().ToString() + "_" + imageFile.FileName;
+                        string uniqueFileName = Guid.NewGuid().ToString() + "_" + Path.GetFileName(imageFile.FileName);
                         string filePath = Path.Combine(uploadsFolder, uniqueFileName);
 
                         using (var fileStream = new FileStream(filePath, FileMode.Create))
@@ -175,23 +175,9 @@ namespace Tourbooking.Controllers
                         tour.ImageUrl = "/images/" + uniqueFileName;
                     }
 
-                    tour.TourId = await GetNextTourIdAsync();
-
-                    await using var transaction = await _context.Database.BeginTransactionAsync();
-                    await _context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT Tours ON");
-
-                    try
-                    {
-                        _context.Add(tour);
-                        await _context.SaveChangesAsync();
-
-                        await _context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT Tours OFF");
-                        await transaction.CommitAsync();
-                    }
-                    finally
-                    {
-                        await _context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT Tours OFF");
-                    }
+                    tour.TourId = 0;
+                    _context.Add(tour);
+                    await _context.SaveChangesAsync();
                     return RedirectToAction(nameof(Index));
                 }
                 catch (Exception ex)
@@ -266,7 +252,7 @@ namespace Tourbooking.Controllers
                             }
                         }
 
-                        string uniqueFileName = Guid.NewGuid().ToString() + "_" + imageFile.FileName;
+                        string uniqueFileName = Guid.NewGuid().ToString() + "_" + Path.GetFileName(imageFile.FileName);
                         string filePath = Path.Combine(uploadsFolder, uniqueFileName);
 
                         using (var fileStream = new FileStream(filePath, FileMode.Create))

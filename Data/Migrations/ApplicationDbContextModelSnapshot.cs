@@ -154,6 +154,52 @@ namespace Tourbooking.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Tourbooking.Distributed.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("LockId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Source", "PublishedAt", "LockedUntil");
+
+                    b.ToTable("OutboxMessages");
+                });
+
             modelBuilder.Entity("Tourbooking.Models.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -265,6 +311,9 @@ namespace Tourbooking.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("RescheduleNote")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -291,7 +340,17 @@ namespace Tourbooking.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.HasKey("BookingId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique()
+                        .HasFilter("[RequestId] IS NOT NULL");
 
                     b.HasIndex("TourId");
 
@@ -458,6 +517,12 @@ namespace Tourbooking.Data.Migrations
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.HasKey("PaymentId");
 

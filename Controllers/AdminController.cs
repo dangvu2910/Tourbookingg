@@ -31,7 +31,7 @@ public class AdminController : Controller
         var model = new AdminDashboardViewModel
         {
             TotalTours = tours.Count,
-            TotalBookings = 0,
+            TotalBookings = await _context.Bookings.CountAsync(),
             TotalUsers = await _userManager.Users.CountAsync(),
             TopTours = tours
                 .OrderByDescending(t => t.Price)
@@ -45,12 +45,9 @@ public class AdminController : Controller
                     Metric = t.Price.ToString("C0", VnCulture)
                 })
                 .ToList(),
-            RecentActivities = new List<AdminActivity>
-            {
-                new("Đặt chỗ mới được xác nhận", "Đang chờ mô đun đặt chỗ"),
-                new("Sự cố thanh toán", "Chưa kết nối cổng thanh toán"),
-                new("Người dùng mới đăng ký", "Đã kích hoạt đăng ký" )
-            }
+            RecentActivities = (await _context.Bookings.AsNoTracking().OrderByDescending(b => b.CreatedAt).Take(5)
+                .Select(b => new { b.BookingId, b.FullName, b.Status }).ToListAsync())
+                .Select(b => new AdminActivity($"Đặt tour #{b.BookingId}", $"{b.FullName} — {b.Status}")).ToList()
         };
 
         return View(model);
@@ -71,6 +68,9 @@ public class AdminController : Controller
         }
 
         var totalTours = await toursQuery.CountAsync();
+        var relatedBookings = _context.Bookings.Where(b => toursQuery.Select(t => t.TourId).Contains(b.TourId));
+        var bookingCount = await relatedBookings.CountAsync();
+        var confirmedCount = await relatedBookings.CountAsync(b => b.Status == "Confirmed");
         var totalPages = (int)Math.Ceiling(totalTours / (double)pageSize);
 
         if (totalPages == 0)
@@ -103,7 +103,7 @@ public class AdminController : Controller
         {
             TotalTours = totalTours,
             Destinations = destinations,
-            AverageBookingRate = 88,
+            AverageBookingRate = bookingCount == 0 ? 0 : (int)Math.Round(confirmedCount * 100.0 / bookingCount),
             Regions = new List<string> { "Miền Bắc", "Miền Trung", "Miền Nam" },
             SelectedRegion = region,
             CurrentPage = page,
@@ -331,9 +331,18 @@ public class AdminController : Controller
             return RedirectToAction(nameof(Bookings));
         }
 
+        if (booking.Status == "Cancelled") return RedirectToAction(nameof(Bookings));
         booking.Status = normalized.Equals("Pending", StringComparison.OrdinalIgnoreCase)
             ? "PendingConfirmation"
             : normalized;
+
+        var payments = await _context.Payments.Where(p => p.BookingId == id).ToListAsync();
+        foreach (var payment in payments)
+        {
+            payment.Status = booking.Status switch { "Confirmed" => "Paid", "Cancelled" => "Cancelled", _ => "PendingConfirmation" };
+            payment.PaidAt = booking.Status == "Confirmed" ? DateTime.UtcNow : null;
+        }
+        if (booking.Status == "Cancelled") booking.CancelledAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Bookings));
