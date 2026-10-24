@@ -2,59 +2,22 @@
 
 Ứng dụng cho phép khách hàng tìm tour, đặt tour, chuyển khoản và nhận thông báo. Quản trị viên quản lý tour, người dùng và xác nhận thanh toán.
 
-Hệ thống được chia thành **5 dịch vụ**, mỗi dịch vụ chạy trong một container riêng. Docker Compose chạy cả ứng dụng, SQL Server và RabbitMQ: tổng cộng **7 container chính**.
+Hệ thống được chia thành **9 dịch vụ ứng dụng**, mỗi dịch vụ chạy trong một container riêng. Docker Compose chạy cả ứng dụng, SQL Server và RabbitMQ: tổng cộng **11 container chính**.
 
 ## 1. Sơ đồ kiến trúc
 
-Có thể hình dung hệ thống đơn giản như sau. Sơ đồ được viết bằng chữ ngay trong README:
-
-                                 Người dùng
-                                     |
-                                     v
-                             Trình duyệt Web
-                                     |
-                              HTTP :8080
-                                     |
-                                     v
-                              API Gateway
-                            (gateway:8080)
-                                     |
-          +------------------+-------+----------+---------------+
-          |                  |                  |               |
-          v                  v                  v               v
-      Identity            Catalog           Booking        Notification
-    Người dùng           Tour du lịch     Đặt / Thanh toán   Thông báo
-       :8080               :8080             :8080             :8080
-          |                  |                  |               |
-          +------------------+-------+----------+---------------+
-                                     |
-                               SQL / TCP :1433
-                                     |
-                                     v
-                                 SQL Server
-                              (sqlserver:1433)
-                                     |
-                      +--------------+----------------+
-                      |                               |
-                      v                               v
-                TourBookingDb             TourBookingNotifications
-             Identity, Catalog, Booking          Notification
-
-
-Đường nối từ các dịch vụ xuống SQL Server thể hiện kết nối tới **cùng một máy chủ SQL**. Bảng bên dưới giải thích dịch vụ nào dùng database nào.
-
-Booking còn gửi sự kiện qua RabbitMQ để Notification xử lý thông báo:
-
 ```text
-      Booking              RabbitMQ              Notification
-         |                     |                        |
-         +-- Gửi sự kiện ------>+--- Giao sự kiện ------>+
-              AMQP :5672             AMQP :5672          |
-                                                        v
-                                             Lưu thông báo vào SQL
+Trình duyệt -> Gateway :8080
+                 |-> Identity    |-> Catalog   |-> Booking
+                 |-> Payment     |-> Review    |-> Support
+                 |-> Reporting   |-> Notification
+
+Identity, Catalog, Booking, Payment, Review, Support, Reporting -> TourBookingDb
+Notification -> TourBookingNotifications
+Các service ghi sự kiện -> SQL Outbox -> RabbitMQ -> Notification
 ```
 
-**Cách đọc:** đường từ trên xuống là request truy cập website; luồng qua RabbitMQ là việc gửi và nhận sự kiện sau khi đặt tour. Gateway cũng chuyển request đọc thông báo đến Notification qua HTTP.
+SQL Server chứa hai database. Mỗi service có health check riêng; Gateway kiểm tra cả tám backend. SQL Server và RabbitMQ là hạ tầng, không tính vào 9 service ứng dụng.
 
 ### Mỗi dịch vụ làm gì?
 
@@ -63,10 +26,14 @@ Booking còn gửi sự kiện qua RabbitMQ để Notification xử lý thông b
 | Gateway | Cửa vào của ứng dụng, chuyển request đến đúng dịch vụ | Chuyển trang đăng nhập đến Identity |
 | Identity | Quản lý tài khoản | Đăng ký, đăng nhập, hồ sơ, vai trò |
 | Catalog | Quản lý tour du lịch | Danh sách, tìm kiếm, chi tiết, thêm/sửa tour |
-| Booking | Quản lý đặt tour và thanh toán | Đặt, hủy, đổi lịch, xác nhận thanh toán, đánh giá, tư vấn |
+| Booking | Quản lý đặt tour | Đặt, hủy, đổi lịch, quản trị booking |
+| Payment | Thanh toán | Trang chuyển khoản, ghi nhận yêu cầu xác nhận thanh toán |
+| Review | Đánh giá | Gửi đánh giá, bình chọn |
+| Support | Tư vấn | Liên hệ, hội thoại và phản hồi của quản trị viên |
+| Reporting | Báo cáo | Dashboard, xuất Excel tour, booking và người dùng |
 | Notification | Xử lý thông báo | Nhận sự kiện RabbitMQ, lưu và cung cấp thông báo |
 
-**Phạm vi hiện tại:** thanh toán nằm trong Booking. Identity, Catalog và Booking dùng chung database và thư viện MVC/EF; Notification có database riêng. Đây là hệ thống nhiều dịch vụ chạy thành các tiến trình riêng, còn dùng chung một phần mã và dữ liệu. Môi trường demo chạy trên một máy.
+**Phạm vi hiện tại:** 9 service chạy trong các tiến trình/container riêng; Payment, Review, Support và Reporting sở hữu các endpoint được tách từ hệ thống cũ. Controller và Razor được biên dịch riêng trong từng service. Các service nghiệp vụ vẫn dùng chung thư viện persistence EF và database `TourBookingDb`; Notification dùng database riêng. Booking vẫn tạo bản ghi thanh toán ban đầu và cập nhật trạng thái liên quan trong cùng giao dịch; Payment xử lý trang thanh toán và yêu cầu xác nhận. Đây chưa phải kiến trúc database riêng cho từng service.
 
 ## 2. Cổng nào dùng để làm gì?
 
@@ -77,6 +44,10 @@ Booking còn gửi sự kiện qua RabbitMQ để Notification xử lý thông b
 | Catalog | `catalog:8080` | Gateway gọi trong mạng Docker |
 | Booking | `booking:8080` | Gateway gọi trong mạng Docker |
 | Notification | `notification:8080` | Gateway và Booking gọi trong mạng Docker |
+| Payment | `payment:8080` | Gateway gọi trong mạng Docker |
+| Review | `review:8080` | Gateway gọi trong mạng Docker |
+| Support | `support:8080` | Gateway gọi trong mạng Docker |
+| Reporting | `reporting:8080` | Gateway gọi trong mạng Docker |
 | RabbitMQ | `rabbitmq:5672` | Ứng dụng gửi/nhận message bằng AMQP |
 | Quản trị RabbitMQ | `http://localhost:15672` | Mở bằng trình duyệt |
 | SQL Server | `sqlserver:1433` | Các dịch vụ kết nối database trong Docker |
@@ -93,6 +64,10 @@ Cấu hình demo đang dùng **HTTP**, chưa có HTTPS hay bộ cân bằng tả
 localhost:8080/Account/Login      -> Gateway -> Identity:8080
 localhost:8080/Tours              -> Gateway -> Catalog:8080
 localhost:8080/Home/Booking       -> Gateway -> Booking:8080
+localhost:8080/Home/Payment       -> Gateway -> Payment:8080
+localhost:8080/Account/Reviews    -> Gateway -> Review:8080
+localhost:8080/Home/Contact       -> Gateway -> Support:8080
+localhost:8080/Admin/Dashboard    -> Gateway -> Reporting:8080
 localhost:8080/api/notifications  -> Gateway -> Notification:8080
 ```
 
@@ -228,7 +203,7 @@ Một container SQL Server chứa hai database:
 
 | Database | Dịch vụ sử dụng | Dữ liệu chính |
 | --- | --- | --- |
-| `TourBookingDb` | Identity, Catalog, Booking | Tài khoản, tour, booking, payment, review, tư vấn, outbox |
+| `TourBookingDb` | Identity, Catalog, Booking, Payment, Review, Support, Reporting | Tài khoản, tour, booking, payment, review, tư vấn, outbox |
 | `TourBookingNotifications` | Notification | Thông báo và EventId |
 
 Docker dùng **volume** để giữ dữ liệu khi container bị dừng hoặc tạo lại:
@@ -314,16 +289,16 @@ Nên đọc theo thứ tự sau:
 | --- | --- | --- |
 | 1 | `compose.yaml` | Có những container nào, kết nối và lưu dữ liệu ra sao |
 | 2 | `services/Gateway/Program.cs` | URL được chuyển đến dịch vụ nào |
-| 3 | `Distributed/ServiceBoundary.cs` | Endpoint thuộc dịch vụ nào |
-| 4 | `Controllers/HomeController.cs` | Luồng đặt tour và gửi yêu cầu xác nhận thanh toán |
-| 5 | `Data/ApplicationDbContext.cs` | Lưu dữ liệu nghiệp vụ cùng sự kiện outbox |
-| 6 | `Distributed/OutboxDispatcher.cs` | Worker lấy sự kiện và gửi RabbitMQ |
+| 3 | `Shared/Routing/ServiceBoundary.cs` | Endpoint thuộc dịch vụ nào |
+| 4 | `services/Booking/Controllers/HomeController.cs` và `services/Payment/Controllers/HomeController.cs` | Luồng đặt tour và gửi yêu cầu xác nhận thanh toán |
+| 5 | `Shared/Persistence/Data/ApplicationDbContext.cs` | Lưu dữ liệu nghiệp vụ cùng sự kiện outbox |
+| 6 | `Shared/Persistence/OutboxDispatcher.cs` | Worker lấy sự kiện và gửi RabbitMQ |
 | 7 | `services/Notification/` | Consumer nhận sự kiện, lưu và đọc thông báo |
 | 8 | `tests/RabbitMq.Tests/` | Cách kiểm chứng hoạt động của hệ thống |
 
-Các project dịch vụ nằm trong `services/`; giao diện trong `Views/`; script vận hành trong `scripts/`. Công nghệ chính là ASP.NET Core MVC 10, Entity Framework Core, SQL Server, YARP, RabbitMQ và Docker Compose.
+Các project dịch vụ nằm trong `services/`; controller, model, ViewModel và giao diện nằm trong từng `services/<TênService>/`; script vận hành trong `scripts/`. Công nghệ chính là ASP.NET Core MVC 10, Entity Framework Core, SQL Server, YARP, RabbitMQ và Docker Compose.
 
-Nếu đã cài .NET SDK 10, có thể kiểm tra build bằng `dotnet build Tourbooking.sln`. Project gốc vẫn chạy MVC với LocalDB bằng `dotnet run --project Tourbooking.csproj`, nhưng muốn học và demo kiến trúc phân tán thì dùng Docker Compose.
+Nếu đã cài .NET SDK 10, có thể kiểm tra build bằng `dotnet build Tourbooking.sln`. Không còn project MVC nguyên khối ở gốc. Chạy hệ thống bằng Docker Compose; có thể chạy từng project bằng `dotnet run --project services/<TênService>/<TênService>.csproj` với cấu hình kết nối tương ứng.
 
 ## 9. API và tài liệu tham khảo
 
@@ -342,3 +317,23 @@ Bản hiện tại có cơ chế retry, health checks và restart tiến trình,
 - [Báo cáo hệ thống phân tán theo 8 chương](docs/bao-cao-he-thong-phan-tan.md)
 - [Kịch bản thuyết trình và demo](docs/kich-ban-demo.md)
 - [Kết quả kiểm chứng thực tế](docs/ket-qua-kiem-thu.md)
+
+## 10. Quyền sở hữu mã nguồn
+
+| Service | Model sở hữu | Mã và giao diện |
+| --- | --- | --- |
+| Identity | ApplicationUser | Tài khoản, hồ sơ, quản lý người dùng |
+| Catalog | Tour | Trang chủ, tìm kiếm và quản lý tour |
+| Booking | Booking | Đặt, hủy, đổi lịch và quản trị booking |
+| Payment | Payment | Trang thanh toán và yêu cầu xác nhận |
+| Review | TourReview, TourReviewVote | Đánh giá và bình chọn |
+| Support | ContactInquiry, ContactInquiryReply | Tư vấn và phản hồi |
+| Reporting | Không sở hữu entity ghi | Dashboard và báo cáo Excel |
+| Notification | NotificationRecord trong Models/ | Consumer RabbitMQ và API thông báo |
+| Gateway | Không có entity nghiệp vụ | Reverse proxy và readiness tổng hợp |
+
+Mỗi service biên dịch controller, ViewModel và View của chính mình; không tham chiếu project web của service khác. Model nghiệp vụ nằm trong `services/<TênService>/Models/`, được biên dịch thành thư viện model riêng. Namespace entity cũ được giữ để tương thích migration EF hiện có.
+
+`Shared/Messaging` chứa hợp đồng sự kiện và topology RabbitMQ; `Shared/Routing` chứa bản đồ URL; `Shared/Hosting` chứa thiết lập host và xử lý HTTP dùng chung; `Shared/Presentation` chứa layout và kiểu hiển thị dùng chung. Đây là thư viện, không phải các service bổ sung.
+
+`Shared/Persistence` hiện giữ DbContext, migration, SQL outbox và worker. Entity vẫn có navigation xuyên nghiệp vụ và các service vẫn truy cập database chung. Vì vậy đây là bước tách mã và tiến trình; chưa phải các microservice độc lập dữ liệu. Không được xóa navigation hoặc di chuyển migration riêng lẻ mà chưa thay truy vấn chéo bằng API/projection sự kiện và chuẩn bị migration dữ liệu.

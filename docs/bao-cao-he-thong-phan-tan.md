@@ -15,7 +15,15 @@ flowchart TB
     U[Trình duyệt] --> G[Gateway YARP]
     G --> I[Identity]
     G --> C[Catalog]
-    G --> B[Booking và Payment]
+    G --> B[Booking]
+    G --> P[Payment]
+    G --> R[Review]
+    G --> S[Support]
+    G --> RP[Reporting]
+    P --> D
+    R --> D
+    S --> D
+    RP --> D
     G --> N[Notification API]
     I --> D[(TourBookingDb)]
     C --> D
@@ -30,7 +38,7 @@ flowchart TB
     K --- N
 ```
 
-Gateway định tuyến theo controller/action để giữ URL cũ. Identity xử lý xác thực và quản lý người dùng. Catalog sở hữu các endpoint quản lý tour. Booking xử lý booking, payment, review và support. Notification nhận sự kiện và lưu vào database riêng. Mỗi dịch vụ có project khởi động và container riêng, cùng chia sẻ thư viện MVC/EF hiện có để giảm rủi ro chuyển đổi.
+Gateway định tuyến theo controller/action để giữ URL cũ. Identity xử lý xác thực và quản lý người dùng. Catalog sở hữu các endpoint quản lý tour. Booking xử lý đặt/hủy/đổi lịch. Payment xử lý yêu cầu thanh toán. Review xử lý đánh giá và bình chọn. Support xử lý tư vấn và phản hồi. Reporting xử lý dashboard và xuất Excel. Notification nhận sự kiện và lưu vào database riêng. Mỗi dịch vụ có project khởi động và container riêng, biên dịch controller và giao diện riêng; thư viện persistence và hạ tầng chung nằm trong Shared/.
 
 Các dịch vụ nghiệp vụ dùng chung database trong giai đoạn này. Ràng buộc khóa ngoại và giao dịch đặt tour/thanh toán được giữ lại. Thiết kế này đáp ứng mô hình dịch vụ phân tán nhưng còn phụ thuộc schema và phiên bản thư viện dùng chung. Muốn chuyển thành microservices độc lập dữ liệu, cần tách Catalog, Identity và Booking databases, thay navigation xuyên domain bằng DTO/REST hoặc projection sự kiện, rồi di chuyển các màn hình báo cáo tổng hợp. Bản hiện tại không tuyên bố đã hoàn thành bước đó.
 
@@ -75,7 +83,7 @@ Queue chính, retry và dead-letter đều durable; publisher đặt persistent.
 
 ## Chương 5 Định danh
 
-Docker DNS định vị dịch vụ bằng tên `identity`, `catalog`, `booking`, `notification`, `sqlserver`, `rabbitmq`. Các tên có thể giữ ổn định khi IP container thay đổi. URI định danh tài nguyên HTTP. BookingId và PaymentId do SQL identity cấp, tránh cách tìm số ID trống vốn gây xung đột khi nhiều tiến trình cùng tạo.
+Docker DNS định vị dịch vụ bằng tên `identity`, `catalog`, `booking`, `payment`, `review`, `support`, `reporting`, `notification`, `sqlserver`, `rabbitmq`. Các tên có thể giữ ổn định khi IP container thay đổi. URI định danh tài nguyên HTTP. BookingId và PaymentId do SQL identity cấp, tránh cách tìm số ID trống vốn gây xung đột khi nhiều tiến trình cùng tạo.
 
 EventId và RequestId là GUID. RequestId đặt trong form, có unique index trong SQL và được kiểm tra theo người dùng để gửi lại cùng yêu cầu không tạo booking thứ hai. EventId được giữ nguyên khi retry/publish lại. CorrelationId xuất phát từ trace HTTP, được đưa vào event và log consumer; response nghiệp vụ có header X-Correlation-ID và X-Service-Name.
 
@@ -121,7 +129,7 @@ Hướng dẫn cấu hình proxy: [Microsoft YARP](https://learn.microsoft.com/a
 | Tiêu chí | Thành phần minh họa |
 | --- | --- |
 | Mở đầu | Mục tiêu, phạm vi và yêu cầu chương 1 |
-| Kiến trúc | 5 project dịch vụ, Compose, sơ đồ chương 2 |
+| Kiến trúc | 9 project dịch vụ, Compose, sơ đồ chương 2 |
 | Tiến trình và luồng | ASP.NET async, BackgroundService, consumer |
 | Trao đổi thông tin | HTTP endpoints và RabbitMQ |
 | Định danh | Docker DNS, URI, GUID, Identity cookie |

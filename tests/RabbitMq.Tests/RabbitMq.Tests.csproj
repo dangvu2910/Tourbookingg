@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -17,6 +17,9 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <ProjectReference Include="../../services/Notification/Notification.csproj" />
+    <ProjectReference Include="../../Shared/Persistence/Tourbooking.Persistence.csproj" />
+    <ProjectReference Include="../../Shared/Routing/Tourbooking.Routing.csproj" />
+    <ProjectReference Include="../../Shared/Hosting/Tourbooking.Hosting.csproj" />
   </ItemGroup>
 
 </Project>

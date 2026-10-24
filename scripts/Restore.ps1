@@ -10,7 +10,7 @@ foreach ($entry in $manifest) {
     if ($entry.File -ne (Split-Path $entry.File -Leaf)) { throw 'Invalid file name in backup manifest.' }
     if ((Get-FileHash -LiteralPath (Join-Path $directory $entry.File) -Algorithm SHA256).Hash -ne $entry.Hash) { throw "Checksum mismatch: $($entry.File)" }
 }
-& "$PSScriptRoot/Compose.ps1" stop gateway booking catalog identity notification
+& "$PSScriptRoot/Compose.ps1" stop gateway booking catalog identity payment review support reporting notification
 try {
     foreach ($database in @('TourBookingDb', 'TourBookingNotifications')) {
         & "$PSScriptRoot/Compose.ps1" cp (Join-Path $directory "$database.bak") "sqlserver:/var/opt/mssql/backup/$database.bak"
@@ -25,6 +25,6 @@ try {
     & "$PSScriptRoot/Compose.ps1" run --rm --no-deps --entrypoint sh identity -c 'tar -xzf /keys/.restore-keys.tar.gz -C /keys && rm -f /keys/.restore-keys.tar.gz'
     & "$PSScriptRoot/Compose.ps1" run --rm --no-deps --entrypoint sh catalog -c 'tar -xzf /app/wwwroot/images/.restore-images.tar.gz -C /app/wwwroot/images && rm -f /app/wwwroot/images/.restore-images.tar.gz'
 } finally {
-    & "$PSScriptRoot/Compose.ps1" up -d identity catalog booking notification gateway
+    & "$PSScriptRoot/Compose.ps1" up -d identity catalog booking payment review support reporting notification gateway
 }
 Write-Host 'Restore complete. Run the workflow tests to verify the restored system.'

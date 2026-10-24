@@ -37,7 +37,7 @@ public class DistributedWorkflowTests
     public async Task GatewayRoutesByServiceAndProtectsPrivateApis()
     {
         using var client = NewClient();
-        foreach (var (path, service) in new[] { ("/", "catalog"), ("/Tours", "catalog"), ("/Account/Login", "identity"), ("/Home/Contact", "booking") })
+        foreach (var (path, service) in new[] { ("/", "catalog"), ("/Tours", "catalog"), ("/Account/Login", "identity"), ("/Home/Contact", "support") })
         {
             using var response = await client.GetAsync(path);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -50,6 +50,42 @@ public class DistributedWorkflowTests
         }
         using var tours = await client.GetAsync("/api/tours");
         Assert.Equal(HttpStatusCode.OK, tours.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExtractedServicesOwnTheirPagesAndDoNotExposeForeignControllers()
+    {
+        using var client = NewClient();
+        foreach (var (path, service) in new[]
+        {
+            ("/Home/Payment?bookingId=1", "payment"), ("/Account/Reviews", "review"),
+            ("/Admin/Contacts", "support"), ("/Admin/Dashboard", "reporting"),
+            ("/Admin/ExportUsers", "reporting"), ("/Admin/ExportToursExcel", "reporting"),
+            ("/Admin/ExportBookingsExcel", "reporting")
+        })
+        {
+            using var response = await client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.Equal(service, response.Headers.GetValues("X-Service-Name").Single());
+        }
+
+        using var backend = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        foreach (var url in new[]
+        {
+            "http://payment:8080/Home/Booking", "http://review:8080/Account/Login",
+            "http://support:8080/Admin/Users", "http://reporting:8080/Admin/UpdateBookingStatus",
+            "http://booking:8080/Home/Payment", "http://catalog:8080/Home/Contact"
+        })
+        {
+            using var response = await backend.GetAsync(url);
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+
+        var accountPage = await client.GetStringAsync("/Account/AccessDenied");
+        Assert.Contains("href=\"/Home/Contact\"", accountPage);
+        Assert.Contains("href=\"/Home/Index\"", accountPage);
+        using var stylesheet = await client.GetAsync("/css/layout.css");
+        Assert.Equal(HttpStatusCode.OK, stylesheet.StatusCode);
     }
 
     [Fact]
@@ -105,7 +141,7 @@ public class DistributedWorkflowTests
             ["__RequestVerificationToken"] = Field(adminPage, "__RequestVerificationToken")
         }));
         Assert.Equal(HttpStatusCode.Redirect, loggedIn.StatusCode);
-        foreach (var (path, service) in new[] { ("/Admin/Users", "identity"), ("/Admin/Tours", "catalog"), ("/Admin/Bookings", "booking"), ("/Admin/Contacts", "booking"), ("/Admin/Dashboard", "booking") })
+        foreach (var (path, service) in new[] { ("/Admin/Users", "identity"), ("/Admin/Tours", "catalog"), ("/Admin/Bookings", "booking"), ("/Admin/Contacts", "support"), ("/Admin/Dashboard", "reporting") })
         {
             using var response = await admin.GetAsync(path);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -143,11 +179,13 @@ public class DistributedWorkflowTests
         {
             var notifications = JsonDocument.Parse(await client.GetStringAsync("/api/notifications"));
             notified = notifications.RootElement.EnumerateArray().Any(n => n.GetProperty("type").GetString() == "booking.created"
-                && n.GetProperty("resourceId").GetString() == bookingId.ToString());
+                && n.GetProperty("resourceId").GetString() == bookingId.ToString())
+                && notifications.RootElement.EnumerateArray().Any(n => n.GetProperty("type").GetString() == "payment.updated"
+                    && n.GetProperty("message").GetString()!.Contains("Processing", StringComparison.Ordinal));
             if (notified) break;
             await Task.Delay(1000);
         }
-        Assert.True(notified, "Booking event was not consumed within 30 seconds");
+        Assert.True(notified, "Booking and Payment service events were not consumed within 30 seconds");
         var notificationsPage = await client.GetStringAsync("/Notifications");
         Assert.Contains("booking.created", notificationsPage);
     }

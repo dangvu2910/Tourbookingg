@@ -8,12 +8,8 @@ void Route(string id, string path, string service, int order = 0) => routes.Add(
     RouteId = id, ClusterId = service, Order = order, Match = new RouteMatch { Path = path },
     Transforms = [new Dictionary<string, string> { ["RequestHeaderOriginalHost"] = "true" }]
 });
-foreach (var action in new[] { "Bookings", "CancelBooking", "RescheduleBooking", "Reviews", "VoteReview" })
-    Route($"account-{action}", $"/Account/{action}/{{**rest}}", ServiceBoundary.Owner("Account", action));
-foreach (var action in new[] { "Booking", "Payment", "ConfirmPayment", "Contact", "ContactDetails", "PostReply" })
-    Route($"home-{action}", $"/Home/{action}/{{**rest}}", ServiceBoundary.Owner("Home", action));
-foreach (var action in new[] { "Users", "ExportUsers", "EditUser", "DeleteUser", "CreateUser", "Tours", "ExportToursExcel" })
-    Route($"admin-{action}", $"/Admin/{action}/{{**rest}}", ServiceBoundary.Owner("Admin", action));
+foreach (var (action, service) in ServiceBoundary.ActionOwners)
+    Route(action.Replace('/', '-'), $"/{action}/{{**rest}}", service);
 Route("account", "/Account/{**rest}", "identity", 10);
 Route("admin", "/Admin/{**rest}", "booking", 10);
 Route("notifications", "/Notifications/{**rest}", "booking");
@@ -22,7 +18,7 @@ Route("booking-api", "/api/bookings/{**rest}", "booking");
 Route("notification-api", "/api/notifications/{**rest}", "notification");
 Route("catalog-api", "/api/tours/{**rest}", "catalog");
 Route("fallback", "/{**rest}", "catalog", 100);
-var clusters = new[] { "identity", "catalog", "booking", "notification" }.Select((service, index) => new ClusterConfig
+var clusters = ServiceBoundary.Services.Select((service, index) => new ClusterConfig
 {
     ClusterId = service,
     Destinations = new Dictionary<string, DestinationConfig>

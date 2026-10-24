@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Review": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5106",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Https__Redirect": "false"
+      }
+    }
+  }
+}

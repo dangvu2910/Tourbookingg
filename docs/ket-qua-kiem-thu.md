@@ -1,5 +1,7 @@
 # Kết quả kiểm chứng ngày 15 tháng 10 năm 2026
 
+> Kết quả bên dưới là bản ghi lịch sử của kiến trúc 5 service, không phải xác nhận kiểm thử bản 9 service.
+
 Các kiểm tra dưới đây chạy trên môi trường Docker mới của dự án. Cơ sở dữ liệu LocalDB gốc không tham gia các thử nghiệm này.
 
 | Kiểm tra | Kết quả |

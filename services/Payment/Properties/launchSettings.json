@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Payment": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5105",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Https__Redirect": "false"
+      }
+    }
+  }
+}

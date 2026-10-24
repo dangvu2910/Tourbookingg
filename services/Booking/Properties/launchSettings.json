@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Booking": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5103",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Https__Redirect": "false"
+      }
+    }
+  }
+}
