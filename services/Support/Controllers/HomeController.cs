@@ -59,9 +59,11 @@ public class HomeController : Controller
             };
         }
 
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> Contact()
         {
+            if (User.IsInRole("Admin")) return Redirect("/Admin/Contacts");
             var user = await _userManager.GetUserAsync(User);
             var lookupEmail = !string.IsNullOrWhiteSpace(user?.Email) ? user!.Email : null;
 
@@ -101,6 +103,7 @@ public class HomeController : Controller
             return View(model);
         }
 
+        [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Contact(ContactViewModel model)
@@ -127,7 +130,7 @@ public class HomeController : Controller
             await _context.SaveChangesAsync();
 
             TempData["ContactMessage"] = "Yêu cầu của bạn đã được gửi. Khi admin trả lời, trạng thái sẽ hiển thị ngay tại đây.";
-            return RedirectToAction("Contact");
+            return RedirectToAction("ContactDetails", new { id = ticket.ContactInquiryId });
         }
 
         [Authorize]
@@ -149,7 +152,7 @@ public class HomeController : Controller
             var replies = await _context.ContactInquiryReplies
                 .AsNoTracking()
                 .Where(r => r.ContactInquiryId == id)
-                .OrderBy(r => r.CreatedAt)
+                .OrderBy(r => r.CreatedAt).ThenBy(r => r.ContactInquiryReplyId)
                 .ToListAsync();
 
             var model = new ContactDetailsViewModel
@@ -163,12 +166,30 @@ public class HomeController : Controller
         }
 
         [Authorize]
+        [HttpGet]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+        public async Task<IActionResult> ContactMessages(int id, int after = 0)
+        {
+            var ticket = await _context.ContactInquiries.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ContactInquiryId == id);
+            if (ticket == null) return NotFound();
+            if (!User.IsInRole("Admin") && ticket.UserId != _userManager.GetUserId(User)) return Forbid();
+            var messages = await _context.ContactInquiryReplies.AsNoTracking()
+                .Where(r => r.ContactInquiryId == id && r.ContactInquiryReplyId > after)
+                .OrderBy(r => r.ContactInquiryReplyId)
+                .Select(r => new { id = r.ContactInquiryReplyId, message = r.Message,
+                    isFromAdmin = r.IsFromAdmin, createdAt = r.CreatedAt }).ToListAsync();
+            return Json(new { status = ticket.Status, messages });
+        }
+
+        [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> PostReply(ReplyCreateViewModel model)
         {
             if (!ModelState.IsValid)
             {
+                TempData["ChatError"] = "Tin nhắn phải có từ 1 đến 2000 ký tự.";
                 return RedirectToAction("ContactDetails", new { id = model.ContactInquiryId });
             }
 
@@ -190,12 +211,22 @@ public class HomeController : Controller
                 ContactInquiryId = model.ContactInquiryId,
                 Message = model.Message.Trim(),
                 UserId = user.Id,
-                IsFromAdmin = false
+                IsFromAdmin = User.IsInRole("Admin")
             };
 
+            ticket.UpdatedAt = DateTime.UtcNow;
+            ticket.Status = reply.IsFromAdmin ? "Replied" : "Pending";
+            if (reply.IsFromAdmin)
+            {
+                ticket.AdminReply = reply.Message;
+                ticket.RepliedAt = reply.CreatedAt;
+                ticket.RepliedByAdminId = user.Id;
+            }
             _context.Add(reply);
             await _context.SaveChangesAsync();
 
+            if (Request.Headers.Accept.Any(v => v != null && v.Contains("application/json")))
+                return Json(new { saved = true });
             return RedirectToAction("ContactDetails", new { id = model.ContactInquiryId });
         }
 

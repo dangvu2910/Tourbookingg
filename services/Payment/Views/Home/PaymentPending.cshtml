@@ -1,0 +1,10 @@
+@model int
+@{
+    ViewData["Title"] = "Đang chuẩn bị thanh toán";
+}
+<div class="container py-5">
+    <h1>Đang chuẩn bị thanh toán</h1>
+    <p>Booking #@Model đã được ghi nhận. Thông tin thanh toán đang được xử lý.</p>
+    <a class="btn btn-primary" href="/Home/Payment?bookingId=@Model">Kiểm tra lại</a>
+    <a href="/Account/Bookings">Xem booking của tôi</a>
+</div>

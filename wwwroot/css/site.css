@@ -28,15 +28,18 @@ body {
   display: flex;
   align-items: center;
   width: 100%;
-  position: relative;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .navbar-content .navbar-brand {
-  flex: 1 1 0;
+  flex: 0 0 auto;
+  margin-right: auto;
 }
 
 .navbar-content .navbar-collapse {
   flex: 1 1 auto;
+  min-width: 0;
 }
 
 .navbar-center {
@@ -45,8 +48,9 @@ body {
 }
 
 .navbar-auth {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   justify-content: flex-end;
+  margin-left: auto;
 }
 
 .navbar-contact { display: inline-flex; align-items: center; }
@@ -106,11 +110,15 @@ body {
 }
 
 @media (min-width: 992px) {
-  .navbar-center {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-  }
+  .navbar-content { flex-wrap: nowrap; }
+  .navbar-center { position: static; transform: none; margin: 0 auto; }
+  .navbar-content .nav-link, .navbar-contact .btn { white-space: nowrap; }
+}
+@media (max-width: 991.98px) {
+  .navbar-content .navbar-collapse { flex-basis: 100%; order: 3; }
+  .navbar-content .navbar-toggler { margin-left: auto; }
+  .navbar-center { gap: 4px; }
+  .navbar-auth { margin: 12px 0; justify-content: flex-start; }
 }
 
 @media (min-width: 576px) and (max-width: 991.98px) {

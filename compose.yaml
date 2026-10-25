@@ -2,7 +2,8 @@ name: tourbooking-distributed
 
 x-app-env: &app-env
   ASPNETCORE_ENVIRONMENT: Production
-  ConnectionStrings__DefaultConnection: Server=sqlserver;Database=TourBookingDb;User Id=sa;Password=${SQL_PASSWORD:?Run scripts/Initialize-Environment.ps1};TrustServerCertificate=True
+  Database__Directory: /data
+  Services__InternalKey: ${INTERNAL_SERVICE_KEY:?Run scripts/Initialize-Environment.ps1}
   RabbitMQ__Enabled: "true"
   RabbitMQ__Host: rabbitmq
   RabbitMQ__Username: tourbooking
@@ -10,7 +11,13 @@ x-app-env: &app-env
   DataProtection__KeysPath: /keys
   Https__Redirect: "false"
   Service__TrustGateway: "true"
-  Database__Initialize: "false"
+  Services__identity: http://identity:8080
+  Services__catalog: http://catalog:8080
+  Services__booking: http://booking:8080
+  Services__payment: http://payment:8080
+  Services__review: http://review:8080
+  Services__support: http://support:8080
+  Services__reporting: http://reporting:8080
   Services__notification: http://notification:8080
   Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
 
@@ -26,22 +33,6 @@ x-app: &app
     start_period: 30s
 
 services:
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${SQL_PASSWORD:?Run scripts/Initialize-Environment.ps1}
-    volumes:
-      - sql-data:/var/opt/mssql
-      - sql-backups:/var/opt/mssql/backup
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-    restart: unless-stopped
-
   rabbitmq:
     image: rabbitmq:4.1-management
     hostname: rabbitmq
@@ -62,17 +53,16 @@ services:
 
   identity:
     <<: *app
+    volumes:
+      - auth-keys:/keys
+      - ./services/Identity/data:/data
     build:
       context: .
       args: { SERVICE: Identity }
     environment:
       <<: *app-env
-      Database__Initialize: "true"
-      Database__SeedDemo: "true"
       AdminUser__Email: ${ADMIN_EMAIL:-admin@tourbooking.local}
       AdminUser__Password: ${ADMIN_PASSWORD:?Run scripts/Initialize-Environment.ps1}
-    depends_on:
-      sqlserver: { condition: service_healthy }
 
   catalog:
     <<: *app
@@ -82,6 +72,7 @@ services:
     environment:
       <<: *app-env
     volumes:
+      - ./services/Catalog/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     depends_on:
@@ -90,6 +81,7 @@ services:
   booking:
     <<: *app
     volumes:
+      - ./services/Booking/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     build:
@@ -108,6 +100,7 @@ services:
     environment:
       <<: *app-env
     volumes:
+      - ./services/Payment/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     depends_on:
@@ -121,6 +114,7 @@ services:
     environment:
       <<: *app-env
     volumes:
+      - ./services/Review/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     depends_on:
@@ -134,6 +128,7 @@ services:
     environment:
       <<: *app-env
     volumes:
+      - ./services/Support/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     depends_on:
@@ -147,6 +142,7 @@ services:
     environment:
       <<: *app-env
     volumes:
+      - ./services/Reporting/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     depends_on:
@@ -154,14 +150,15 @@ services:
 
   notification:
     <<: *app
+    volumes:
+      - auth-keys:/keys
+      - ./services/Notification/data:/data
     build:
       context: .
       args: { SERVICE: Notification }
     environment:
       <<: *app-env
-      ConnectionStrings__Notifications: Server=sqlserver;Database=TourBookingNotifications;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
     depends_on:
-      sqlserver: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
 
   gateway:
@@ -201,16 +198,12 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USERNAME: tourbooking
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
-      TEST_DB: Server=sqlserver;Database=TourBookingDb;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
-      TEST_NOTIFICATION_DB: Server=sqlserver;Database=TourBookingNotifications;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
       TEST_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@tourbooking.local}
       TEST_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     depends_on:
       gateway: { condition: service_healthy }
 
 volumes:
-  sql-data:
-  sql-backups:
   rabbit-data:
   auth-keys:
   tour-images:

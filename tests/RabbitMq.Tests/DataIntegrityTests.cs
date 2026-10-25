@@ -6,14 +6,27 @@ using Tourbooking.Notifications;
 
 namespace RabbitMq.Tests;
 
-public class DataIntegrityTests
+public class DataIntegrityTests : IDisposable
 {
-    private static ApplicationDbContext Context() => new(new DbContextOptionsBuilder<ApplicationDbContext>()
-        .UseSqlServer(Environment.GetEnvironmentVariable("TEST_DB") ?? throw new InvalidOperationException("Run integration tests using the Compose tests profile.")).Options,
-        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tourbooking-tests", Guid.NewGuid().ToString("N"));
+    private ApplicationDbContext Context()
+    {
+        Directory.CreateDirectory(_folder);
+        var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_folder, "booking.db")};Foreign Keys=False;Default Timeout=30").Options,
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>
+            { ["RabbitMQ:Enabled"] = "true", ["Service:Name"] = "booking" }).Build());
+        db.Database.EnsureCreated();
+        if (!db.Users.Any())
         {
-            ["RabbitMQ:Enabled"] = "true", ["Service:Name"] = "booking"
-        }).Build());
+            db.ApplyingProjection = true;
+            db.Users.Add(new ApplicationUser { Id = "test-user", UserName = "user@example.test", Email = "user@example.test" });
+            db.Tours.Add(new Tour { Name = "Test", Location = "Test", Price = 1234567.89m });
+            db.SaveChangesAsync().GetAwaiter().GetResult();
+            db.ApplyingProjection = false;
+        }
+        return db;
+    }
 
     private static async Task<Booking> NewBooking(ApplicationDbContext db)
     {
@@ -64,15 +77,66 @@ public class DataIntegrityTests
     [Fact]
     public async Task DuplicateEventsProduceOneNotification()
     {
+        Directory.CreateDirectory(_folder);
         var options = new DbContextOptionsBuilder<NotificationDb>()
-            .UseSqlServer(Environment.GetEnvironmentVariable("TEST_NOTIFICATION_DB") ?? throw new InvalidOperationException("Run using Compose tests profile.")).Options;
+            .UseSqlite($"Data Source={Path.Combine(_folder, "notification.db")};Default Timeout=30").Options;
         var evt = new IntegrationEvent(Guid.NewGuid(), "booking.created", "test", Guid.NewGuid().ToString(),
             "dedup-test", "test@example.test", "Pending", DateTime.UtcNow, Guid.NewGuid().ToString("N"));
         await using var first = new NotificationDb(options);
+        await first.Database.EnsureCreatedAsync();
         await using var second = new NotificationDb(options);
         var results = await Task.WhenAll(first.StoreAsync(evt, CancellationToken.None), second.StoreAsync(evt, CancellationToken.None));
         Assert.Single(results, saved => saved);
         await using var check = new NotificationDb(options);
         Assert.Equal(1, await check.Notifications.CountAsync(n => n.EventId == evt.EventId));
+    }
+    [Fact]
+    public async Task ForeignTablesCannotBeWritten()
+    {
+        await using var db = Context();
+        db.Payments.Add(new Payment { BookingId = 1, UserId = "test-user", Amount = 123.45m });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task SupportRepliesCreateDurableEvents()
+    {
+        Directory.CreateDirectory(_folder);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>
+            { ["Service:Name"] = "support", ["RabbitMQ:Enabled"] = "true" }).Build();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_folder, "support.db")};Foreign Keys=False").Options, config);
+        await db.Database.EnsureCreatedAsync();
+        var ticket = new ContactInquiry { UserId = "customer", Email = "user@example.test", FullName = "Test", Subject = "Help", Message = "Hello" };
+        db.ContactInquiries.Add(ticket);
+        await db.SaveChangesAsync();
+        db.ContactInquiryReplies.Add(new ContactInquiryReply { ContactInquiryId = ticket.ContactInquiryId, IsFromAdmin = true, Message = "Reply" });
+        await db.SaveChangesAsync();
+        var evt = await db.OutboxMessages.SingleAsync(x => x.Type == "contact.reply.created");
+        Assert.Contains("customer", evt.Payload);
+    }
+
+    [Fact]
+    public async Task WorkflowRedeliveryDoesNotCreateDuplicatePayment()
+    {
+        Directory.CreateDirectory(_folder);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>
+            { ["Service:Name"] = "payment", ["RabbitMQ:Enabled"] = "true" }).Build();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_folder, "payment.db")};Foreign Keys=False").Options, config);
+        await db.Database.EnsureCreatedAsync();
+        var evt = new IntegrationEvent(Guid.NewGuid(), "booking.created", "booking", "42", "customer", null,
+            "PendingConfirmation", DateTime.UtcNow, "test", System.Text.Json.JsonSerializer.Serialize(new BookingEventData(42, "customer", 1234567.89m, "PendingConfirmation")));
+        await BookingPaymentConsumer.HandleAsync(db, evt, config, default);
+        await BookingPaymentConsumer.HandleAsync(db, evt, config, default);
+        var payment = await db.Payments.SingleAsync();
+        Assert.Equal(1234567.89m, payment.Amount);
+        Assert.Single(await db.InboxMessages.ToListAsync());
+    }
+
+    public void Dispose()
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        if (Directory.Exists(_folder)) Directory.Delete(_folder, recursive: true);
     }
 }

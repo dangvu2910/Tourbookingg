@@ -1,26 +1,35 @@
-# Kết quả kiểm chứng ngày 15 tháng 10 năm 2026
+# Kết quả kiểm thử
 
-> Kết quả bên dưới là bản ghi lịch sử của kiến trúc 5 service, không phải xác nhận kiểm thử bản 9 service.
+## Lần xác minh hiện tại — 25/10/2026
 
-Các kiểm tra dưới đây chạy trên môi trường Docker mới của dự án. Cơ sở dữ liệu LocalDB gốc không tham gia các thử nghiệm này.
+Các lệnh dưới đây đã chạy trên worktree hiện tại, với Docker Compose của dự án và dữ liệu demo local.
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| Build toàn solution .NET 10 | Thành công, 0 lỗi và 0 cảnh báo |
-| Gateway và 4 dịch vụ phía sau | Tất cả readiness healthy |
-| RabbitMQ publish và receive | Vượt qua |
-| Đăng ký, chia sẻ cookie qua Gateway, đặt tour, gửi lại RequestId, xác nhận thanh toán bởi Admin, nhận thông báo | Vượt qua |
-| API riêng tư, quyền Admin, chủ sở hữu booking, CSRF | Vượt qua |
-| Rollback dữ liệu booking cùng outbox | Vượt qua |
-| Hai cập nhật dùng phiên bản cũ của booking | Bản cũ bị từ chối bằng optimistic concurrency |
-| Hai thao tác lưu cùng EventId | Chỉ có một thông báo được lưu |
-| Dừng RabbitMQ rồi tạo booking | Booking vẫn lưu thành công |
-| Bật lại RabbitMQ | Sự kiện pending được giao đến Notification |
-| Sao lưu hai SQL database | BACKUP CHECKSUM và RESTORE VERIFYONLY thành công |
-| Khôi phục đầy đủ từ bản vừa sao lưu | Hai database, RabbitMQ definitions, auth keys và ảnh được phục hồi; các dịch vụ khởi động lại thành công |
+| Build toàn solution .NET 10 (`dotnet build Tourbooking.sln --no-restore`) | Thành công, 0 lỗi và 0 cảnh báo |
+| Kiểm thử unit/biên dịch vụ (`DataIntegrityTests`, `ServiceBoundaryTests`, `ServiceUrlHelperTests`, `SharedSessionValidationTests`) | 33/33 đạt |
+| Build image test trong Docker Compose | Thành công |
+| Integration test đầy đủ trong Compose, gồm RabbitMQ và workflow HTTP qua Gateway | 39/39 đạt |
+| Resilience test: tạo booking khi RabbitMQ dừng, sau đó khởi động broker và nhận lại sự kiện | Đạt |
+| Gateway và tám backend sau khi kiểm thử | Healthy |
 
-Bộ integration test gồm 6 test, chạy bằng service `tests` trong Compose. Test workflow bao gồm nhiều bước nghiệp vụ và phân quyền trong một test. Các script backup, restore và resilience được chạy riêng để kiểm chứng hành vi vận hành thực tế.
+### Lệnh tái chạy trên Windows
 
-Log chi tiết được lưu trong thư mục `artifacts/` trên máy chạy, không commit vào repository: `dotnet-build-final.log`, `integration-tests.log`, `integration-tests-final.log`, `resilience-test.log`, `backup-verification.log`, `restore-drill.log`.
+Từ thư mục gốc dự án, dùng PowerShell:
 
-Phạm vi chưa kiểm chứng: tải cao, cụm nhiều máy, replica SQL/RabbitMQ, failover node vật lý và thanh toán qua nhà cung cấp thực tế. Những nội dung này không được tính là tính năng đã triển khai.
+```powershell
+dotnet build Tourbooking.sln --no-restore
+dotnet test tests\RabbitMq.Tests\RabbitMq.Tests.csproj --no-build --filter "FullyQualifiedName~DataIntegrityTests|FullyQualifiedName~ServiceBoundaryTests|FullyQualifiedName~ServiceUrlHelperTests|FullyQualifiedName~SharedSessionValidationTests"
+.\scripts\Compose.ps1 --profile test build tests
+.\scripts\Compose.ps1 --profile test run --rm tests
+.\scripts\Test-Resilience.ps1
+.\scripts\Compose.ps1 ps
+```
+
+Integration test cần chạy trong Compose: test dùng DNS nội bộ như `payment`, RabbitMQ và thông tin admin được truyền qua `.env`. Chạy `dotnet test` trực tiếp trên Windows không thiết lập các phụ thuộc đó nên không phải phép xác minh integration hợp lệ.
+
+Test workflow đăng ký người dùng và tạo booking/yêu cầu hỗ trợ thử trong các database đang mount. Chỉ chạy trên dữ liệu development/demo; không chạy trên dữ liệu production. Không dùng `down -v` để dọn test vì lệnh đó xóa volume Docker.
+
+## Phạm vi chưa được xác nhận trong lần này
+
+Không chạy thử tải cao, diễn tập Backup/Restore trên bản sao riêng, thử failover phần cứng hoặc xác nhận thanh toán qua nhà cung cấp thật. Kiến trúc và các giới hạn này được mô tả trong [kiến trúc SQLite](kien-truc-sqlite.md). Các kết quả kiểm thử cũ của kiến trúc SQL Server không được dùng làm bằng chứng cho phiên bản hiện tại.

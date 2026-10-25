@@ -13,3 +13,11 @@ appsettings.Development.json
 backups/
 **/TestResults/
 .tools/
+
+# Local databases and migration reports contain user data.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+services/*/data/

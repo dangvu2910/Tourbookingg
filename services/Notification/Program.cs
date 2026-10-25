@@ -5,9 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using Tourbooking.Notifications;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDbContext<NotificationDb>(options => options.UseSqlServer(
-    builder.Configuration.GetConnectionString("Notifications")
-    ?? "Server=(localdb)\\MSSQLLocalDB;Database=TourBookingNotifications;Trusted_Connection=True;TrustServerCertificate=True"));
+var dataDirectory = builder.Configuration["Database:Directory"] ?? Path.Combine(builder.Environment.ContentRootPath, "data");
+Directory.CreateDirectory(dataDirectory);
+builder.Services.AddDbContext<NotificationDb>(options => options.UseSqlite(
+    $"Data Source={Path.Combine(dataDirectory, "notification.db")};Default Timeout=30"));
 builder.Services.AddDataProtection().SetApplicationName("Tourbooking.SharedAuth")
     .PersistKeysToFileSystem(new DirectoryInfo(builder.Configuration["DataProtection:KeysPath"] ?? ".keys"));
 builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme).AddCookie(IdentityConstants.ApplicationScheme, options =>

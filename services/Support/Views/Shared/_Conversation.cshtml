@@ -1,0 +1,42 @@
+@model Tourbooking.ViewModels.ContactDetailsViewModel
+@{ var isAdmin = User.IsInRole("Admin"); }
+<style>
+.support-chat{max-width:1000px;margin:24px auto;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;background:#fff;box-shadow:0 12px 40px #0f172a0a}
+.support-head{padding:22px 26px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:16px;align-items:center}.support-head h2{font-size:22px;margin:6px 0}.support-head p{margin:0;color:#64748b}
+.support-messages{height:52vh;min-height:300px;overflow:auto;background:#f8fafc;padding:24px;display:flex;flex-direction:column;gap:16px}.support-message{max-width:80%;align-self:flex-start;background:white;border:1px solid #e2e8f0;border-radius:16px 16px 16px 4px;padding:12px 16px;color:#0f172a}.support-message.mine{align-self:flex-end;background:#e0f2fe;border-color:#bae6fd;border-radius:16px 16px 4px 16px}.support-text{white-space:pre-wrap;overflow-wrap:anywhere}.support-meta{font-size:12px;color:#64748b;margin-top:7px}.support-label{font-size:12px;font-weight:700;margin-bottom:5px}.support-compose{padding:20px;border-top:1px solid #e2e8f0}.support-compose textarea{width:100%;resize:vertical;min-height:75px}.support-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}.support-feedback{font-size:13px;color:#64748b}
+</style>
+<section class="support-chat">
+    <header class="support-head">
+        <div>
+            <a href="@(isAdmin ? "/Admin/Contacts" : "/Home/Contact")">← Danh sách trò chuyện</a>
+            <h2>@Model.Ticket.Subject</h2>
+            <p>@(isAdmin ? Model.Ticket.FullName + " · " + Model.Ticket.Email : "Đội ngũ tư vấn du lịch")</p>
+        </div>
+        <span id="chat-status" class="badge bg-secondary">@(Model.Ticket.Status == "Replied" ? "Đã trả lời" : "Chờ tư vấn viên")</span>
+    </header>
+    <div id="chat-messages" class="support-messages" role="log" aria-label="Lịch sử trò chuyện" aria-live="polite">
+        <article class="support-message @(!isAdmin ? "mine" : "")">
+            <div class="support-label">@Model.Ticket.FullName</div>
+            <div class="support-text">@Model.Ticket.Message</div>
+            <div class="support-meta"><time datetime="@Model.Ticket.CreatedAt.ToString("O")">@Model.Ticket.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</time></div>
+        </article>
+        @foreach (var reply in Model.Replies)
+        {
+            <article class="support-message @(reply.IsFromAdmin == isAdmin ? "mine" : "")" data-message-id="@reply.ContactInquiryReplyId">
+                <div class="support-label">@(reply.IsFromAdmin ? "Tư vấn viên" : Model.Ticket.FullName)</div>
+                <div class="support-text">@reply.Message</div>
+                <div class="support-meta"><time datetime="@reply.CreatedAt.ToString("O")">@reply.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</time></div>
+            </article>
+        }
+    </div>
+    <form id="chat-form" class="support-compose" action="/Home/PostReply" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="ContactInquiryId" value="@Model.Ticket.ContactInquiryId" />
+        <label for="chat-input" class="visually-hidden">Tin nhắn</label>
+        <textarea id="chat-input" class="form-control" name="Message" maxlength="2000" required placeholder="Nhập tin nhắn của bạn..."></textarea>
+        <div class="support-actions">
+            <span id="chat-feedback" class="support-feedback" role="status">@(TempData["ChatError"] ?? "Lịch sử trò chuyện được lưu tự động.")</span>
+            <button class="btn btn-primary" type="submit">Gửi tin nhắn</button>
+        </div>
+    </form>
+</section>

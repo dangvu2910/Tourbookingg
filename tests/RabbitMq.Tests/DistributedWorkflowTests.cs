@@ -34,14 +34,70 @@ public class DistributedWorkflowTests
     }
 
     [Fact]
+    public async Task InternalDataIsNotExposedThroughGateway()
+    {
+        using var client = NewClient();
+        using var response = await client.GetAsync("/internal/data");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SupportReplyNotifiesTicketOwnerAsynchronously()
+    {
+        using var customer = NewClient();
+        var email = await Register(customer);
+        var contact = await customer.GetStringAsync("/Home/Contact");
+        using var created = await customer.PostAsync("/Home/Contact", new FormUrlEncodedContent(new Dictionary<string,string>
+        {
+            ["FullName"] = "Support Test", ["Email"] = email, ["Subject"] = "Integration support",
+            ["Message"] = "Please help", ["__RequestVerificationToken"] = Field(contact, "__RequestVerificationToken")
+        }));
+        Assert.Equal(HttpStatusCode.Redirect, created.StatusCode);
+        contact = await customer.GetStringAsync("/Home/Contact");
+        var match = Regex.Match(contact, "/Home/ContactDetails/(\\d+)");
+        Assert.True(match.Success, "New ticket must be visible to its owner.");
+        var id = match.Groups[1].Value;
+        using var admin = NewClient();
+        var login = await admin.GetStringAsync("/Account/Login");
+        using var loggedIn = await admin.PostAsync("/Account/Login", new FormUrlEncodedContent(new Dictionary<string,string>
+        {
+            ["Email"] = Environment.GetEnvironmentVariable("TEST_ADMIN_EMAIL")!,
+            ["Password"] = Environment.GetEnvironmentVariable("TEST_ADMIN_PASSWORD")!,
+            ["__RequestVerificationToken"] = Field(login, "__RequestVerificationToken")
+        }));
+        Assert.Equal(HttpStatusCode.Redirect, loggedIn.StatusCode);
+        var contacts = await admin.GetStringAsync("/Admin/Contacts");
+        using var replied = await admin.PostAsync("/Admin/ReplyContact", new FormUrlEncodedContent(new Dictionary<string,string>
+        {
+            ["contactInquiryId"] = id, ["adminReply"] = "Support integration response",
+            ["__RequestVerificationToken"] = Field(contacts, "__RequestVerificationToken")
+        }));
+        Assert.Equal(HttpStatusCode.Redirect, replied.StatusCode);
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            using var notifications = JsonDocument.Parse(await customer.GetStringAsync("/api/notifications"));
+            if (notifications.RootElement.EnumerateArray().Any(n => n.GetProperty("type").GetString() == "contact.reply.created"
+                && n.GetProperty("resourceId").GetString() == id)) return;
+            await Task.Delay(1000);
+        }
+        Assert.Fail("Support reply was not delivered to the ticket owner within 30 seconds.");
+    }
+
+    [Fact]
     public async Task GatewayRoutesByServiceAndProtectsPrivateApis()
     {
         using var client = NewClient();
-        foreach (var (path, service) in new[] { ("/", "catalog"), ("/Tours", "catalog"), ("/Account/Login", "identity"), ("/Home/Contact", "support") })
+        foreach (var (path, service) in new[] { ("/", "catalog"), ("/Tours", "catalog"), ("/Account/Login", "identity") })
         {
             using var response = await client.GetAsync(path);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal(service, response.Headers.GetValues("X-Service-Name").Single());
+        }
+        using (var contact = await client.GetAsync("/Home/Contact"))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, contact.StatusCode);
+            Assert.Equal("support", contact.Headers.GetValues("X-Service-Name").Single());
+            Assert.Contains("/Account/Login", contact.Headers.Location?.ToString());
         }
         foreach (var path in new[] { "/api/identity/me", "/api/bookings", "/api/notifications" })
         {
@@ -114,7 +170,13 @@ public class DistributedWorkflowTests
         Assert.NotNull(location);
         Assert.Contains("Payment", location);
         var bookingPage = await client.GetStringAsync(location);
+        for (var attempt = 0; attempt < 30 && !bookingPage.Contains("action=\"/Home/ConfirmPayment\""); attempt++)
+        {
+            await Task.Delay(1000);
+            bookingPage = await client.GetStringAsync(location);
+        }
         Assert.Contains("__RequestVerificationToken", bookingPage);
+        Assert.Contains("action=\"/Home/ConfirmPayment\"", bookingPage);
         using var repeated = await client.PostAsync("/Home/Booking", new FormUrlEncodedContent(body));
         Assert.Equal(location, repeated.Headers.Location?.ToString());
         var bookings = JsonDocument.Parse(await client.GetStringAsync("/api/bookings"));
@@ -130,6 +192,12 @@ public class DistributedWorkflowTests
         }));
         Assert.Equal(HttpStatusCode.Redirect, confirmed.StatusCode);
         var updated = JsonDocument.Parse(await client.GetStringAsync($"/api/bookings/{bookingId}"));
+        for (var attempt = 0; attempt < 30 && updated.RootElement.GetProperty("status").GetString() != "Processing"; attempt++)
+        {
+            await Task.Delay(1000);
+            updated.Dispose();
+            updated = JsonDocument.Parse(await client.GetStringAsync($"/api/bookings/{bookingId}"));
+        }
         Assert.Equal("Processing", updated.RootElement.GetProperty("status").GetString());
 
         using var admin = NewClient();

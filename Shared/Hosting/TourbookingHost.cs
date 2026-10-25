@@ -16,10 +16,10 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = ar
 builder.Configuration["Service:Name"] = service;
 
 // Add services to the container.
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
-        .ConfigureWarnings(warnings =>
-            warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
+var dataDirectory = builder.Configuration["Database:Directory"] ?? Path.Combine(builder.Environment.ContentRootPath, "data");
+Directory.CreateDirectory(dataDirectory);
+builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite(
+    $"Data Source={Path.Combine(dataDirectory, service + ".db")};Foreign Keys=False;Default Timeout=30"));
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
         options.Password.RequiredLength = 6;
@@ -40,6 +40,8 @@ builder.Services.AddDataProtection().SetApplicationName("Tourbooking.SharedAuth"
         ?? Path.Combine(builder.Environment.ContentRootPath, ".keys")));
 builder.Services.ConfigureApplicationCookie(options =>
 {
+    if (service is not ("identity" or "standalone"))
+        options.Events.OnValidatePrincipal = SharedSessionValidation.ValidateAsync;
     options.Cookie.Name = ".Tourbooking.Auth";
     options.Cookie.Path = "/";
     options.Cookie.HttpOnly = true;
@@ -60,10 +62,13 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.Add<ConcurrencyFilter>();
+    options.Filters.Add<ProjectionRefreshFilter>();
 });
 builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.Routing.IUrlHelperFactory, ServiceUrlHelperFactory>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("sql", tags: ["ready"]);
 builder.Services.AddHttpClient();
+if ((service is "booking" or "payment") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
+    builder.Services.AddHostedService<BookingPaymentConsumer>();
 if ((service is "booking" or "payment" or "support" or "identity" or "catalog" or "review" or "standalone") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
     builder.Services.AddHostedService<OutboxDispatcher>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -89,6 +94,12 @@ app.Use(async (context, next) =>
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 app.MapGet("/service-info", () => new { service, node = Environment.MachineName });
+app.MapGet("/internal/data", async (HttpContext http, ApplicationDbContext db) =>
+{
+    var key = builder.Configuration["Services:InternalKey"];
+    if (string.IsNullOrEmpty(key) || http.Request.Headers["X-Service-Key"] != key) return Results.Unauthorized();
+    return Results.Ok(await ProjectionStore.ExportAsync(db, service, ct: http.RequestAborted));
+});
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -109,19 +120,35 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+if (service is "identity" or "standalone")
+    app.MapGet("/internal/auth/session", (HttpContext http) =>
+    {
+        var key = builder.Configuration["Services:InternalKey"];
+        if (string.IsNullOrEmpty(key) || http.Request.Headers["X-Service-Key"] != key)
+            return Results.Unauthorized();
+        if (http.User.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+        return Results.Ok(http.User.Claims.Select(c => new SharedSessionValidation.SessionClaim(c.Type, c.Value)));
+    });
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapControllers();
 
-if (builder.Configuration.GetValue("Database:Initialize", service == "standalone"))
+using (var initializationScope = app.Services.CreateScope())
+    await initializationScope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.EnsureCreatedAsync();
+if (service is "identity" or "standalone")
 {
     using var scope = app.Services.CreateScope();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    dbContext.Database.Migrate();
     await EnsureRolesAndAdminAsync(builder.Configuration, roleManager, userManager);
+}
+if (service is "catalog" or "standalone")
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     if (builder.Configuration.GetValue("Database:SeedDemo", false) && !await dbContext.Tours.AnyAsync())
     {
         dbContext.Tours.AddRange(

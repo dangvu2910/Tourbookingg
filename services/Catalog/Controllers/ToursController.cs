@@ -107,11 +107,6 @@ public class ToursController : Controller
 
         public async Task<IActionResult> Index(string? query, decimal? minPrice, decimal? maxPrice, string[]? regions, int page = 1)
         {
-            if (User?.Identity?.IsAuthenticated == true && User.IsInRole("Admin"))
-            {
-                return RedirectToAction("Tours", "Admin");
-            }
-
             const int pageSize = 6;
 
             var toursQuery = _context.Tours.AsQueryable();
@@ -397,23 +392,10 @@ public class ToursController : Controller
                 return RedirectToAction("Tours", "Admin");
             }
 
-            var bookings = await _context.Bookings
-                .Where(b => b.TourId == id)
-                .ToListAsync();
-
-            if (bookings.Count > 0)
+            if (await _context.Bookings.AnyAsync(b => b.TourId == id))
             {
-                var bookingIds = bookings.Select(b => b.BookingId).ToList();
-                var payments = await _context.Payments
-                    .Where(p => bookingIds.Contains(p.BookingId))
-                    .ToListAsync();
-
-                if (payments.Count > 0)
-                {
-                    _context.Payments.RemoveRange(payments);
-                }
-
-                _context.Bookings.RemoveRange(bookings);
+                TempData["BookingError"] = "Tour đã có booking, không thể xóa lịch sử đặt tour và thanh toán.";
+                return RedirectToAction("Tours", "Admin");
             }
 
             _context.Tours.Remove(tour);

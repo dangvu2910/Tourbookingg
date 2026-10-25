@@ -10,8 +10,7 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
         var configuration = new ConfigurationBuilder().SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json", optional: true).AddEnvironmentVariables().Build();
         return new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlServer(configuration.GetConnectionString("DefaultConnection")
-                ?? "Server=(localdb)\\MSSQLLocalDB;Database=TourBookingDb;Trusted_Connection=True;TrustServerCertificate=True")
+            .UseSqlite(configuration.GetConnectionString("DefaultConnection") ?? "Data Source=design-time.db;Foreign Keys=False")
             .Options, configuration);
     }
 }

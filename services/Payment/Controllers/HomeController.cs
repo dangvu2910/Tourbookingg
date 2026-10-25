@@ -49,8 +49,7 @@ public class HomeController : Controller
 
             if (payment == null)
             {
-                TempData["BookingError"] = "Không tìm thấy thông tin thanh toán.";
-                return RedirectToAction("Bookings", "Account");
+                return View("PaymentPending", bookingId);
             }
 
             var bankCode = _configuration["BankTransfer:BankCode"]
@@ -156,15 +155,10 @@ public class HomeController : Controller
 
             payment.Status = "Processing";
 
-            if (!string.Equals(booking.Status, "Confirmed", StringComparison.OrdinalIgnoreCase))
-            {
-                booking.Status = "Processing";
-            }
-
             await _context.SaveChangesAsync();
 
             TempData["BookingSuccess"] = "Đặt tour thành công. Đã ghi nhận thanh toán.";
-            return RedirectToAction("Index");
+            return RedirectToAction("Bookings", "Account");
         }
 
 

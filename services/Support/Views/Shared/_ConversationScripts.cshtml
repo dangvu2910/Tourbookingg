@@ -1,0 +1,65 @@
+@model Tourbooking.ViewModels.ContactDetailsViewModel
+@{ var isAdmin = User.IsInRole("Admin"); }
+
+<script>
+(() => {
+    const list = document.getElementById('chat-messages');
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('chat-input');
+    const feedback = document.getElementById('chat-feedback');
+    const isAdmin = @Json.Serialize(isAdmin);
+    const customer = @Json.Serialize(Model.Ticket.FullName);
+    let cursor = @Model.Replies.Select(r => r.ContactInquiryReplyId).DefaultIfEmpty(0).Max();
+    let refreshing = false;
+    function localTime(el) {
+        const raw = el.getAttribute('datetime');
+        el.textContent = new Date(/Z$|[+-]\d\d:\d\d$/.test(raw) ? raw : raw + 'Z').toLocaleString('vi-VN');
+    }
+    list.querySelectorAll('time').forEach(localTime);
+    list.scrollTop = list.scrollHeight;
+    async function refresh() {
+        if (refreshing) return;
+        refreshing = true;
+        try {
+            const response = await fetch('/Home/ContactMessages?id=@Model.Ticket.ContactInquiryId&after=' + cursor, {cache:'no-store', headers:{Accept:'application/json'}});
+            if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error();
+            const data = await response.json();
+            const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 100;
+            for (const message of data.messages) {
+                if (message.id <= cursor) continue;
+                const bubble = document.createElement('article');
+                bubble.className = 'support-message' + (message.isFromAdmin === isAdmin ? ' mine' : '');
+                const label = document.createElement('div'); label.className = 'support-label'; label.textContent = message.isFromAdmin ? 'Tư vấn viên' : customer;
+                const content = document.createElement('div'); content.className = 'support-text'; content.textContent = message.message;
+                const meta = document.createElement('div'); meta.className = 'support-meta';
+                const time = document.createElement('time'); time.setAttribute('datetime', message.createdAt); localTime(time); meta.append(time);
+                bubble.append(label, content, meta); list.append(bubble); cursor = message.id;
+            }
+            document.getElementById('chat-status').textContent = data.status === 'Replied' ? 'Đã trả lời' : 'Chờ tư vấn viên';
+            if (nearBottom) list.scrollTop = list.scrollHeight;
+            feedback.textContent = 'Đã cập nhật · Lịch sử được lưu tự động';
+        } catch { feedback.textContent = 'Chưa cập nhật được tin nhắn. Đang thử kết nối lại…'; }
+        finally { refreshing = false; }
+    }
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (!input.value.trim()) { input.setCustomValidity('Vui lòng nhập tin nhắn.'); input.reportValidity(); return; }
+        const button = form.querySelector('button'); button.disabled = true;
+        input.readOnly = true;
+        try {
+            const response = await fetch(form.action, {method:'POST', body:new FormData(form), headers:{Accept:'application/json'}});
+            if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error();
+            const result = await response.json();
+            if (!result.saved) throw new Error();
+            input.value = '';
+            await refresh();
+            list.scrollTop = list.scrollHeight;
+        } catch { feedback.textContent = 'Chưa gửi được tin nhắn. Nội dung vẫn được giữ lại, bạn hãy thử lại.'; }
+        finally { button.disabled = false; input.readOnly = false; input.focus(); }
+    });
+    input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!form.querySelector('button').disabled) form.requestSubmit(); } });
+    input.addEventListener('input', () => input.setCustomValidity(''));
+    setInterval(() => { if (!document.hidden) refresh(); }, 3000);
+    refresh();
+})();
+</script>

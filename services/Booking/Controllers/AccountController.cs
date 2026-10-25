@@ -240,15 +240,6 @@ public class AccountController : Controller
             booking.CancelledAt = DateTime.UtcNow;
             booking.CancelReason = reason.Trim();
 
-            var payments = await _context.Payments
-                .Where(p => p.BookingId == booking.BookingId)
-                .ToListAsync();
-
-            foreach (var payment in payments)
-            {
-                payment.Status = "Cancelled";
-            }
-
             await _context.SaveChangesAsync();
             TempData["BookingSuccess"] = "Đã hủy booking của bạn.";
             return RedirectToAction("Bookings");

@@ -41,6 +41,18 @@ public sealed class ServiceUrlHelperFactory : IUrlHelperFactory
         public string? Content(string? contentPath) => inner.Content(contentPath);
         public bool IsLocalUrl(string? url) => inner.IsLocalUrl(url);
         public string? Link(string? routeName, object? values) => inner.Link(routeName, values);
-        public string? RouteUrl(UrlRouteContext context) => inner.RouteUrl(context);
+        public string? RouteUrl(UrlRouteContext context)
+        {
+            var values = new RouteValueDictionary(context.Values);
+            if (context.RouteName == null && values.TryGetValue("controller", out var controller)
+                && values.TryGetValue("action", out var action))
+                return Action(new UrlActionContext
+                {
+                    Controller = Convert.ToString(controller, CultureInfo.InvariantCulture),
+                    Action = Convert.ToString(action, CultureInfo.InvariantCulture),
+                    Values = values, Protocol = context.Protocol, Host = context.Host, Fragment = context.Fragment
+                });
+            return inner.RouteUrl(context);
+        }
     }
 }

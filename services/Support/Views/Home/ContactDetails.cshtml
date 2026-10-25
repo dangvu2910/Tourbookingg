@@ -1,79 +1,10 @@
 @model Tourbooking.ViewModels.ContactDetailsViewModel
-
 @{
-    ViewData["Title"] = "Chi tiết yêu cầu";
+    var isAdmin = User.IsInRole("Admin");
+    ViewData["Title"] = "Trò chuyện tư vấn";
+    if (isAdmin) Layout = "_AdminLayout";
 }
-
-<link rel="stylesheet" href="~/css/home.css" asp-append-version="true" />
-
-<div class="py-4">
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0">
-                <div class="card-body">
-                    <h5>CHI TIẾT YÊU CẦU</h5>
-                    <hr />
-                    <div><strong>Chủ đề:</strong> @Model.Ticket.Subject</div>
-                    <div class="mt-2"><strong>Ngày tạo:</strong> @Model.Ticket.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
-                    <div class="mt-2"><strong>Trạng thái:</strong> @Model.Ticket.Status</div>
-                    <div class="mt-3"><strong>Nội dung:</strong>
-                        <div class="border p-2 bg-light">@Model.Ticket.Message</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-8">
-            <div class="card shadow-sm border-0">
-                <div class="card-body">
-                    <h4>@Model.Ticket.Subject</h4>
-                    <div class="mt-3">
-                        <div class="conversation">
-                            <div class="mb-3">
-                                <div class="chat-bubble chat-bubble-user">
-                                    <div class="chat-bubble-label">Bạn</div>
-                                    <div class="chat-bubble-text">@Model.Ticket.Message</div>
-                                </div>
-                            </div>
-
-                            @foreach (var r in Model.Replies)
-                            {
-                                if (r.IsFromAdmin)
-                                {
-                                    <div class="chat-bubble chat-bubble-admin mt-3">
-                                        <div class="chat-bubble-label">Admin</div>
-                                        <div class="chat-bubble-text">@r.Message</div>
-                                        <div class="chat-bubble-meta">@r.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="chat-bubble chat-bubble-user mt-3">
-                                        <div class="chat-bubble-label">Bạn</div>
-                                        <div class="chat-bubble-text">@r.Message</div>
-                                        <div class="chat-bubble-meta">@r.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
-                                    </div>
-                                }
-                            }
-
-                            @if (!Model.Replies.Any())
-                            {
-                                <div class="text-muted text-center py-4">Chưa có phản hồi nào. Admin sẽ trả lời sớm nhất có thể.</div>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <form asp-action="PostReply" method="post">
-                            <input type="hidden" name="ContactInquiryId" value="@Model.ReplyForm.ContactInquiryId" />
-                            <div class="mb-2">
-                                <textarea name="Message" class="form-control" rows="4" placeholder="Nhập phản hồi của bạn..."></textarea>
-                            </div>
-                            <button class="btn btn-danger" type="submit">Gửi</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+@await Html.PartialAsync("_Conversation", Model)
+@section Scripts {
+    @await Html.PartialAsync("_ConversationScripts", Model)
+}

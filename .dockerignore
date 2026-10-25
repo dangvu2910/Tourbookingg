@@ -8,6 +8,12 @@
 .tools
 backups
 artifacts
+data
+**/*.db
+**/*.db-wal
+**/*.db-shm
 *.docx
 *.pdf
 tests/TestResults
+
+services/*/data

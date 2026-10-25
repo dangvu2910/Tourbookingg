@@ -169,12 +169,6 @@ public class AdminController : Controller
             ? "PendingConfirmation"
             : normalized;
 
-        var payments = await _context.Payments.Where(p => p.BookingId == id).ToListAsync();
-        foreach (var payment in payments)
-        {
-            payment.Status = booking.Status switch { "Confirmed" => "Paid", "Cancelled" => "Cancelled", _ => "PendingConfirmation" };
-            payment.PaidAt = booking.Status == "Confirmed" ? DateTime.UtcNow : null;
-        }
         if (booking.Status == "Cancelled") booking.CancelledAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();

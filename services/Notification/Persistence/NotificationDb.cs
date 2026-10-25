@@ -22,7 +22,7 @@ public sealed class NotificationDb(DbContextOptions<NotificationDb> options) : D
             Message = $"{evt.Type}: #{evt.ResourceId} — {evt.Status}", CreatedAt = evt.OccurredAt
         });
         try { await SaveChangesAsync(ct); return true; }
-        catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException sql && sql.Number is 2601 or 2627)
+        catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 })
         {
             // Another consumer committed the same event. The unique key is the final deduplication guard.
             ChangeTracker.Clear();

@@ -106,7 +106,6 @@ public class HomeController : Controller
                 return RedirectToAction("Login", "Account");
             }
 
-            var paymentMethod = "BankTransfer";
 
             if (model.RequestId == Guid.Empty) ModelState.AddModelError(nameof(model.RequestId), "Mã yêu cầu không hợp lệ.");
             if (model.TravelDate?.Date < DateTime.Today.AddDays(1)) ModelState.AddModelError(nameof(model.TravelDate), "Ngày khởi hành phải từ ngày mai.");
@@ -145,40 +144,14 @@ public class HomeController : Controller
                 Status = paymentStatus
             };
 
-            var bankCode = _configuration["BankTransfer:BankCode"];
-            var accountNumber = _configuration["BankTransfer:AccountNumber"];
-            var accountName = _configuration["BankTransfer:AccountName"];
-
-            var payment = new Payment
-            {
-                Booking = booking,
-                UserId = user.Id,
-                Amount = total,
-                Method = paymentMethod,
-                Status = paymentStatus,
-                Provider = null,
-                TransactionCode = null,
-                BankName = bankCode?.Trim(),
-                BankAccountName = accountName?.Trim(),
-                BankAccountNumber = accountNumber?.Trim(),
-                BankReference = null
-            };
-
             _context.Bookings.Add(booking);
-            _context.Payments.Add(payment);
             try { await _context.SaveChangesAsync(); }
-            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException sql && sql.Number is 2601 or 2627)
+            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 })
             {
                 _context.ChangeTracker.Clear();
                 var duplicate = await _context.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.RequestId == model.RequestId && b.UserId == user.Id);
                 if (duplicate == null) throw;
                 return RedirectToAction("Payment", new { bookingId = duplicate.BookingId });
-            }
-
-            if (string.IsNullOrWhiteSpace(payment.BankReference))
-            {
-                payment.BankReference = $"VOY-{booking.BookingId}";
-                await _context.SaveChangesAsync();
             }
 
             TempData["BookingSuccess"] = "Đặt tour thành công. Vui lòng thanh toán để hoàn tất.";

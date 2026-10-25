@@ -24,11 +24,11 @@ public class AdminController : Controller
         _userManager = userManager;
     }
 
-    public async Task<IActionResult> Contacts(string? status = null)
+    public async Task<IActionResult> Contacts(string? status = null, int? id = null)
     {
         var query = _context.ContactInquiries
             .AsNoTracking()
-            .OrderByDescending(c => c.CreatedAt)
+            .OrderByDescending(c => c.UpdatedAt)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -56,6 +56,21 @@ public class AdminController : Controller
                 .ToListAsync()
         };
 
+        var selectedId = id ?? model.Contacts.FirstOrDefault()?.ContactInquiryId;
+        if (selectedId.HasValue)
+        {
+            var ticket = await _context.ContactInquiries.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ContactInquiryId == selectedId.Value);
+            if (ticket == null) return NotFound();
+            model.Conversation = new ContactDetailsViewModel
+            {
+                Ticket = ticket,
+                Replies = await _context.ContactInquiryReplies.AsNoTracking()
+                    .Where(r => r.ContactInquiryId == ticket.ContactInquiryId)
+                    .OrderBy(r => r.ContactInquiryReplyId).ToListAsync(),
+                ReplyForm = new ReplyCreateViewModel { ContactInquiryId = ticket.ContactInquiryId }
+            };
+        }
         return View(model);
     }
 
@@ -63,7 +78,7 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ReplyContact(int contactInquiryId, string adminReply)
     {
-        if (string.IsNullOrWhiteSpace(adminReply))
+        if (string.IsNullOrWhiteSpace(adminReply) || adminReply.Trim().Length > 2000)
         {
             TempData["ContactReplyMessage"] = "Vui lòng nhập nội dung phản hồi.";
             return RedirectToAction(nameof(Contacts));
@@ -95,7 +110,7 @@ public class AdminController : Controller
         await _context.SaveChangesAsync();
 
         TempData["ContactReplyMessage"] = "Đã gửi phản hồi cho người dùng.";
-        return RedirectToAction(nameof(Contacts));
+        return RedirectToAction("ContactDetails", "Home", new { id = contactInquiryId });
     }
 
 }

@@ -34,6 +34,12 @@ builder.Services.AddReverseProxy().LoadFromMemory(routes, clusters);
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient();
 var app = builder.Build();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/internal")) { context.Response.StatusCode = 404; return; }
+    context.Request.Headers.Remove("X-Service-Key");
+    await next();
+});
 app.MapHealthChecks("/health/live");
 app.MapGet("/health/ready", async (IHttpClientFactory factory) =>
 {

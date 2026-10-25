@@ -20,18 +20,20 @@ flowchart TB
     G --> R[Review]
     G --> S[Support]
     G --> RP[Reporting]
-    P --> D
-    R --> D
-    S --> D
-    RP --> D
     G --> N[Notification API]
-    I --> D[(TourBookingDb)]
-    C --> D
-    B --> D
-    D --- O[Outbox SQL]
-    B -->|Worker publish| R[RabbitMQ topic exchange]
-    R -->|Consumer ACK sau commit| N
-    N --> ND[(TourBookingNotifications)]
+    I --> ID[(Identity SQLite)]
+    C --> CD[(Catalog SQLite)]
+    B --> BD[(Booking SQLite)]
+    P --> PD[(Payment SQLite)]
+    R --> RD[(Review SQLite)]
+    S --> SD[(Support SQLite)]
+    RP --> RPD[(Reporting SQLite)]
+    N --> ND[(Notification SQLite)]
+    B -->|Outbox worker| Q[RabbitMQ topic exchange]
+    Q -->|Consumer + inbox| P
+    Q -->|Consumer + inbox| N
+    S -->|Outbox worker| Q
+    Q -->|contact events| N
     K[(Khóa Data Protection)] --- I
     K --- C
     K --- B
@@ -40,7 +42,7 @@ flowchart TB
 
 Gateway định tuyến theo controller/action để giữ URL cũ. Identity xử lý xác thực và quản lý người dùng. Catalog sở hữu các endpoint quản lý tour. Booking xử lý đặt/hủy/đổi lịch. Payment xử lý yêu cầu thanh toán. Review xử lý đánh giá và bình chọn. Support xử lý tư vấn và phản hồi. Reporting xử lý dashboard và xuất Excel. Notification nhận sự kiện và lưu vào database riêng. Mỗi dịch vụ có project khởi động và container riêng, biên dịch controller và giao diện riêng; thư viện persistence và hạ tầng chung nằm trong Shared/.
 
-Các dịch vụ nghiệp vụ dùng chung database trong giai đoạn này. Ràng buộc khóa ngoại và giao dịch đặt tour/thanh toán được giữ lại. Thiết kế này đáp ứng mô hình dịch vụ phân tán nhưng còn phụ thuộc schema và phiên bản thư viện dùng chung. Muốn chuyển thành microservices độc lập dữ liệu, cần tách Catalog, Identity và Booking databases, thay navigation xuyên domain bằng DTO/REST hoặc projection sự kiện, rồi di chuyển các màn hình báo cáo tổng hợp. Bản hiện tại không tuyên bố đã hoàn thành bước đó.
+Mỗi backend có file SQLite riêng; Gateway không sở hữu database. Các dịch vụ nghiệp vụ ghi dữ liệu thuộc miền của mình và trao đổi thay đổi qua HTTP nội bộ hoặc RabbitMQ. Để giữ giao diện và báo cáo hiện có, một số service duy trì bản sao chỉ đọc được làm mới từ service nguồn. Các project vẫn dùng chung model EF và thư viện hạ tầng; đây là kiến trúc ứng dụng phân tán phù hợp demo/đồ án, chưa phải các microservice độc lập hoàn toàn theo bounded context.
 
 ## Chương 3 Tiến trình và luồng
 
@@ -51,23 +53,27 @@ sequenceDiagram
     actor Khach as Khách hàng
     participant G as Gateway
     participant B as Booking
-    participant SQL as SQL Server
+    participant DB as Booking SQLite
     participant W as Outbox Worker
     participant R as RabbitMQ
     participant N as Notification
+    participant P as Payment
+    participant PD as Payment SQLite
+    participant ND as Notification SQLite
     Khach->>G: POST /Home/Booking + CSRF + RequestId
     G->>B: Chuyển tiếp cookie và request
-    B->>SQL: BEGIN TRANSACTION
-    B->>SQL: Lưu booking và payment
-    B->>SQL: Lưu các sự kiện outbox với GUID
-    B->>SQL: COMMIT
+    B->>DB: Lưu booking và outbox trong transaction
+    B->>DB: COMMIT
     B-->>Khach: Chuyển đến trang thanh toán
-    W->>SQL: Claim lease sự kiện
+    W->>DB: Claim lease sự kiện
     W->>R: Publish persistent, mandatory
     R-->>W: Publisher confirm
-    W->>SQL: Đánh dấu PublishedAt
-    R->>N: Deliver event
-    N->>SQL: INSERT thông báo vào database riêng
+    W->>DB: Đánh dấu PublishedAt
+    R->>P: Deliver booking event
+    P->>PD: Ghi Payment và inbox
+    P->>R: ACK sau commit
+    R->>N: Deliver notification event
+    N->>ND: INSERT thông báo vào database riêng
     N->>R: ACK sau commit
 ```
 
@@ -77,33 +83,33 @@ Nếu worker chết sau khi publish nhưng trước khi ghi PublishedAt, sự ki
 
 HTTP được dùng giữa trình duyệt, Gateway và dịch vụ đích. API đọc gồm `/api/tours`, `/api/identity/me`, `/api/bookings` và `/api/notifications`. Form MVC là các endpoint ghi, có antiforgery token. Màn hình thông báo gọi Notification API qua HTTP nội bộ và chuyển cookie của chính người dùng để áp dụng phân quyền.
 
-RabbitMQ dùng topic exchange `tourbooking.events` và các event `booking.created`, `booking.updated`, `payment.created`, `payment.updated`, `contact.created`, `contact.updated`. Envelope gồm EventId, Type, Source, ResourceId, UserId, Email, Status, OccurredAt và CorrelationId. Không đưa mật khẩu hoặc cookie vào message. Sự kiện hiện là thông tin trạng thái, chưa phải nhật ký event sourcing đầy đủ.
+RabbitMQ dùng topic exchange `tourbooking.events` và các event `booking.created`, `booking.updated`, `payment.created`, `payment.updated`, `contact.created`, `contact.updated`, `contact.reply.created`. Envelope gồm EventId, Type, Source, ResourceId, UserId, Email, Status, OccurredAt và CorrelationId. Không đưa mật khẩu hoặc cookie vào message. Sự kiện hiện là thông tin trạng thái, chưa phải nhật ký event sourcing đầy đủ.
 
 Queue chính, retry và dead-letter đều durable; publisher đặt persistent. Publisher confirms cho biết broker đã tiếp nhận publish. Consumer ACK chỉ sau khi database commit. Hai xác nhận này phục vụ hai giai đoạn riêng của luồng giao nhận. Chi tiết giao thức: [RabbitMQ confirms](https://www.rabbitmq.com/docs/confirms) và [reliability](https://www.rabbitmq.com/docs/reliability).
 
 ## Chương 5 Định danh
 
-Docker DNS định vị dịch vụ bằng tên `identity`, `catalog`, `booking`, `payment`, `review`, `support`, `reporting`, `notification`, `sqlserver`, `rabbitmq`. Các tên có thể giữ ổn định khi IP container thay đổi. URI định danh tài nguyên HTTP. BookingId và PaymentId do SQL identity cấp, tránh cách tìm số ID trống vốn gây xung đột khi nhiều tiến trình cùng tạo.
+Docker DNS định vị dịch vụ bằng tên `identity`, `catalog`, `booking`, `payment`, `review`, `support`, `reporting`, `notification` và `rabbitmq`. Các tên có thể giữ ổn định khi IP container thay đổi. URI định danh tài nguyên HTTP; ID nghiệp vụ là khóa của database service sở hữu, còn EventId, RequestId và CorrelationId là GUID.
 
-EventId và RequestId là GUID. RequestId đặt trong form, có unique index trong SQL và được kiểm tra theo người dùng để gửi lại cùng yêu cầu không tạo booking thứ hai. EventId được giữ nguyên khi retry/publish lại. CorrelationId xuất phát từ trace HTTP, được đưa vào event và log consumer; response nghiệp vụ có header X-Correlation-ID và X-Service-Name.
+EventId và RequestId là GUID. RequestId đặt trong form, có unique index trong database Booking và được kiểm tra theo người dùng để gửi lại cùng yêu cầu không tạo booking thứ hai. EventId được giữ nguyên khi retry/publish lại. CorrelationId xuất phát từ trace HTTP, được đưa vào event và log consumer; response nghiệp vụ có header X-Correlation-ID và X-Service-Name.
 
 Xác thực dùng ASP.NET Core Identity cookie. Các dịch vụ dùng chung application name, cookie name, scheme và key ring Data Protection. Không cần JWT để minh họa định danh trong kiến trúc hiện tại. Form chống CSRF; API và thông báo chỉ trả dữ liệu thuộc người đang đăng nhập. Admin được kiểm tra bằng role. Cấu hình cookie dùng chung theo [hướng dẫn Microsoft](https://learn.microsoft.com/aspnet/core/security/cookie-sharing).
 
 ## Chương 6 Đồng bộ hóa
 
-Booking và Payment có SQL rowversion. EF Core đưa phiên bản cũ vào điều kiện UPDATE; nếu request khác đã cập nhật, thao tác sau bị từ chối và HTTP trả 409, yêu cầu tải lại dữ liệu. Unique RequestId chống duplicate booking kể cả khi hai request cùng vượt qua bước kiểm tra ban đầu.
+Booking và Payment dùng concurrency token trong database SQLite riêng. EF Core đưa phiên bản cũ vào điều kiện UPDATE; nếu request khác đã cập nhật, thao tác sau bị từ chối và HTTP trả 409, yêu cầu tải lại dữ liệu. Unique RequestId chống duplicate booking kể cả khi hai request cùng vượt qua bước kiểm tra ban đầu.
 
-Outbox cùng dữ liệu nghiệp vụ nằm trong một SQL transaction. Worker lấy lease bằng `UPDLOCK`, `READPAST`, `ROWLOCK` và transaction để hai replica không cùng claim một hàng đang được giữ. Lease kéo dài hai phút và có thể phục hồi sau khi tiến trình chết. Một publish chậm quá lease vẫn có thể gây phát trùng; khóa EventId tại consumer xử lý trường hợp này.
+Outbox cùng dữ liệu nghiệp vụ nằm trong transaction của database service phát sự kiện. Worker claim lease để khôi phục xử lý sau khi tiến trình chết. Một publish chậm quá lease vẫn có thể gây phát trùng; inbox/khóa EventId tại consumer xử lý trường hợp này. Không có transaction phân tán giữa Booking và Payment; trạng thái liên service được đồng bộ bất đồng bộ.
 
 Notification dùng khóa chính EventId như inbox đồng thời cũng là bản ghi thông báo. Kiểm tra trước khi INSERT giúp giảm xung đột; unique key là cơ chế quyết định khi nhiều consumer nhận trùng đồng thời. Không dùng Redis distributed lock vì các thao tác đang cần đồng bộ đều có thể giải quyết bằng transaction, lease và ràng buộc SQL.
 
 ## Chương 7 Sao lưu
 
-`scripts/Backup.ps1` tạo full backup cho TourBookingDb và TourBookingNotifications, dùng CHECKSUM và RESTORE VERIFYONLY; xuất broker definitions, khóa cookie và ảnh tour; ghi manifest SHA256. SQL, RabbitMQ, khóa và ảnh có named volume để tồn tại khi container được tạo lại. Một máy/volume bị mất vẫn có thể làm mất dữ liệu nếu bản sao lưu chỉ nằm trên cùng thiết bị, vì vậy cần sao chép thư mục backup ra thiết bị hoặc storage riêng.
+`scripts/Backup.ps1` dừng backend trước khi sao chép tám thư mục database SQLite, khóa cookie, ảnh tour và broker definitions; manifest SHA256 dùng để kiểm tra tính toàn vẹn. Container giữ dữ liệu qua bind mount hoặc named volume. Một máy/volume bị mất vẫn có thể làm mất dữ liệu nếu bản sao lưu chỉ nằm trên cùng thiết bị, vì vậy cần sao chép thư mục backup ra thiết bị hoặc storage riêng.
 
-`scripts/Restore.ps1` kiểm tra checksum trước khi thao tác, dừng các dịch vụ ứng dụng, khôi phục hai database và các file, rồi khởi động lại ứng dụng. Tham số `-Apply` là dấu hiệu rõ ràng đây là thao tác ghi đè. Có thể lên lịch Backup.ps1 bằng Windows Task Scheduler; dự án cung cấp script, chưa tự đăng ký lịch trên máy người dùng.
+`scripts/Restore.ps1` kiểm tra checksum trước khi thao tác, dừng các dịch vụ ứng dụng, giữ dữ liệu hiện tại ở thư mục riêng, phân phối lại tám database và khôi phục các file, rồi tạo lại container. Tham số `-Apply` là xác nhận rõ ràng thao tác thay dữ liệu. Có thể lên lịch Backup.ps1 bằng Windows Task Scheduler; dự án cung cấp script, chưa tự đăng ký lịch trên máy người dùng.
 
-Broker definitions không chứa nội dung queue. Khi mất `rabbit-data`, có thể phát lại các sự kiện đã có trong outbox bằng `scripts/Replay-Outbox.ps1 -SinceUtc ...`; ID sự kiện giữ nguyên để consumer loại bản trùng. Phải chọn thời điểm trước sự cố và kiểm tra dead-letter queue. Dữ liệu tạo sau mốc backup có thể không khôi phục được: RPO phụ thuộc lịch backup, RTO phụ thuộc kích thước dữ liệu và thời gian khởi động. VERIFYONLY xác minh cấu trúc backup, không thay thế một lần diễn tập restore đầy đủ.
+Broker definitions không chứa nội dung queue. Khi mất `rabbit-data`, có thể phát lại sự kiện còn trong outbox bằng `scripts/Replay-Outbox.ps1 -Service booking -SinceUtc ...`; ID sự kiện giữ nguyên để consumer loại bản trùng. Phải chọn thời điểm trước sự cố và kiểm tra dead-letter queue. Dữ liệu tạo sau mốc backup có thể không khôi phục được: RPO phụ thuộc lịch backup, RTO phụ thuộc kích thước dữ liệu và thời gian khởi động. Cần diễn tập restore định kỳ; checksum không thay thế kiểm tra khôi phục thực tế.
 
 ## Chương 8 Chịu lỗi
 
@@ -115,16 +121,16 @@ Broker definitions không chứa nội dung queue. Khi mất `rabbit-data`, có 
 | Message không hợp lệ | NACK không requeue, đưa vào DLQ | Message xuất hiện ở notifications.dead |
 | Lưu thông báo lỗi tạm thời | Confirm bản retry trước ACK bản gốc, đợi TTL 5 giây | Tối đa 5 retry rồi DLQ |
 | Worker chết khi giữ lease | Lease hết hạn sau 2 phút, worker khác có thể nhận | Outbox tiếp tục được phát |
-| Hai request cập nhật cùng booking | Rowversion phát hiện bản cũ | HTTP 409, không ghi đè âm thầm |
-| SQL Server lỗi | Readiness 503 và request ghi thất bại | Không báo đặt tour thành công khi SQL chưa lưu |
+| Hai request cập nhật cùng booking | Concurrency token phát hiện bản cũ | HTTP 409, không ghi đè âm thầm |
+| SQLite của một service không sẵn sàng | Health check/request của service đó báo lỗi | Không báo thành công khi dữ liệu chưa lưu |
 
-Gateway dùng active health checks YARP và chỉ định tuyến đến destination khỏe. Các route hoạt động độc lập; dependency thông báo lỗi không buộc Catalog hoặc Booking ngừng phục vụ. Compose cấu hình restart unless-stopped để phục hồi tiến trình bị thoát, nhưng không tự restart chỉ vì healthcheck unhealthy. Chưa có replica SQL, cluster RabbitMQ, cân bằng nhiều destination hay circuit breaker đầy đủ; đây là các hướng mở rộng, không phải tính năng đã có.
+Gateway dùng active health checks YARP và chỉ định tuyến đến destination khỏe. Các route hoạt động độc lập; dependency thông báo lỗi không buộc Catalog hoặc Booking ngừng phục vụ. Compose cấu hình restart unless-stopped để phục hồi tiến trình bị thoát, nhưng không tự restart chỉ vì healthcheck unhealthy. Chưa có replica database, cluster RabbitMQ, cân bằng nhiều destination hay circuit breaker đầy đủ; đây là các hướng mở rộng, không phải tính năng đã có.
 
 Hướng dẫn cấu hình proxy: [Microsoft YARP](https://learn.microsoft.com/aspnet/core/fundamentals/servers/yarp/config-files).
 
 ## Kiểm chứng và đối chiếu tiêu chí
 
-`tests/RabbitMq.Tests` gồm smoke test publish/receive RabbitMQ, workflow HTTP qua Gateway và kiểm tra dữ liệu SQL. Kết quả chạy thực tế cần xem log `dotnet test`; không suy ra điểm số từ việc tồn tại công nghệ. Các test tạo dữ liệu thử, nên chạy trên database demo trước khi dùng dữ liệu thật.
+`tests/RabbitMq.Tests` gồm smoke test publish/receive RabbitMQ, workflow HTTP qua Gateway và kiểm tra tính toàn vẹn SQLite. Chạy kiểm thử tích hợp qua profile `test` của Compose để test cùng mạng Docker và có broker/cấu hình admin; test tạo tài khoản và dữ liệu thử nên chạy trên môi trường demo, không dùng database production. Đợt xác minh ngày 25/10/2026: build solution không cảnh báo, 33 kiểm thử unit/biên dịch vụ và 39 integration test đạt; script chịu lỗi RabbitMQ cũng đạt. Xem chi tiết tại [kết quả kiểm thử](ket-qua-kiem-thu.md).
 
 | Tiêu chí | Thành phần minh họa |
 | --- | --- |
@@ -133,7 +139,7 @@ Hướng dẫn cấu hình proxy: [Microsoft YARP](https://learn.microsoft.com/a
 | Tiến trình và luồng | ASP.NET async, BackgroundService, consumer |
 | Trao đổi thông tin | HTTP endpoints và RabbitMQ |
 | Định danh | Docker DNS, URI, GUID, Identity cookie |
-| Đồng bộ hóa | SQL transaction, rowversion, unique index, lease, inbox |
-| Sao lưu | Backup/Restore scripts, CHECKSUM, SHA256, volumes |
+| Đồng bộ hóa | Transaction SQLite cục bộ, concurrency token, unique index, lease, inbox |
+| Sao lưu | Backup/Restore scripts, SHA256, bind mounts và volumes |
 | Chịu lỗi | Outbox reconnect, retry/DLQ, readiness, restart |
 | Thuyết trình | Kịch bản demo kèm trong docs |

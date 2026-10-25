@@ -11,7 +11,7 @@ public static class ServiceBoundary
         ["Account/Bookings"] = "booking", ["Account/CancelBooking"] = "booking", ["Account/RescheduleBooking"] = "booking",
         ["Account/Reviews"] = "review", ["Account/VoteReview"] = "review",
         ["Home/Booking"] = "booking", ["Home/Payment"] = "payment", ["Home/ConfirmPayment"] = "payment",
-        ["Home/Contact"] = "support", ["Home/ContactDetails"] = "support", ["Home/PostReply"] = "support",
+        ["Home/Contact"] = "support", ["Home/ContactDetails"] = "support", ["Home/PostReply"] = "support", ["Home/ContactMessages"] = "support",
         ["Admin/Users"] = "identity", ["Admin/EditUser"] = "identity", ["Admin/DeleteUser"] = "identity", ["Admin/CreateUser"] = "identity",
         ["Admin/Tours"] = "catalog", ["Admin/Contacts"] = "support", ["Admin/ReplyContact"] = "support",
         ["Admin/Dashboard"] = "reporting", ["Admin/ExportUsers"] = "reporting",

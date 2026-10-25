@@ -26,9 +26,9 @@ public sealed class OutboxDispatcher(IServiceScopeFactory scopes, IConfiguration
                     var leaseId = Guid.NewGuid();
                     await using (var transaction = await db.Database.BeginTransactionAsync(stoppingToken))
                     {
-                        // SQL locks make the lease atomic across replicas. Expired leases recover after a crash.
-                        var batch = await db.OutboxMessages.FromSqlInterpolated($"SELECT TOP (20) * FROM OutboxMessages WITH (UPDLOCK, READPAST, ROWLOCK) WHERE Source = {source} AND PublishedAt IS NULL AND (LockedUntil IS NULL OR LockedUntil < {now}) ORDER BY CreatedAt")
-                            .ToListAsync(stoppingToken);
+                        // One instance per SQLite service. Expired leases recover after a crash.
+                        var batch = await db.OutboxMessages.Where(m => m.Source == source && m.PublishedAt == null
+                            && (m.LockedUntil == null || m.LockedUntil < now)).OrderBy(m => m.CreatedAt).Take(20).ToListAsync(stoppingToken);
                         foreach (var item in batch)
                         {
                             item.LockId = leaseId;

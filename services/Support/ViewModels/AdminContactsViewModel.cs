@@ -2,6 +2,8 @@ namespace Tourbooking.ViewModels;
 
 public class AdminContactsViewModel
 {
+    public ContactDetailsViewModel? Conversation { get; set; }
+
     public string? SelectedStatus { get; set; }
 
     public List<AdminContactRow> Contacts { get; set; } = new();

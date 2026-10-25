@@ -27,6 +27,20 @@ public class ServiceUrlHelperTests
     }
 
     [Fact]
+    public void ForeignRouteLinksKeepTheirDestinationInsteadOfFallingBackToHome()
+    {
+        using var provider = new ServiceCollection().AddSingleton<IConfiguration>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Service:Name"] = "catalog" }).Build())
+            .BuildServiceProvider();
+        var context = new ActionContext(new DefaultHttpContext { RequestServices = provider }, new RouteData(), new ActionDescriptor());
+        var helper = new ServiceUrlHelperFactory().GetUrlHelper(context);
+        Assert.Equal("/Home/Contact", helper.RouteUrl(new UrlRouteContext
+        { Values = new { controller = "Home", action = "Contact" } }));
+        Assert.Equal("/Account/Profile", helper.RouteUrl(new UrlRouteContext
+        { Values = new { controller = "Account", action = "Profile" } }));
+    }
+
+    [Fact]
     public void ForeignLinksEscapeRouteAndQueryValuesAndKeepPathBase()
     {
         using var provider = new ServiceCollection().AddSingleton<IConfiguration>(new ConfigurationBuilder()

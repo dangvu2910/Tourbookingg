@@ -1,5 +1,11 @@
-param([Parameter(Mandatory=$true)][DateTime]$SinceUtc)
+param([Parameter(Mandatory=$true)][DateTime]$SinceUtc, [Parameter(Mandatory=$true)][ValidateSet('identity','catalog','booking','payment','review','support')][string]$Service)
 $ErrorActionPreference = 'Stop'
-$timestamp = $SinceUtc.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffff')
-$sql = "USE [TourBookingDb]; UPDATE OutboxMessages SET PublishedAt=NULL, LockedUntil=NULL, LockId=NULL, LastError=NULL WHERE CreatedAt >= CONVERT(datetime2, '$timestamp', 126); SELECT @@ROWCOUNT AS EventsScheduledForReplay;"
-& "$PSScriptRoot/Invoke-Sql.ps1" -Query $sql
+$projectRoot = Split-Path $PSScriptRoot -Parent
+$serviceFolder = [cultureinfo]::InvariantCulture.TextInfo.ToTitleCase($Service)
+$databasePath = Join-Path $projectRoot "services/$serviceFolder/data/$Service.db"
+if (-not (Test-Path -LiteralPath $databasePath)) { throw 'SQLite database does not exist.' }
+& "$PSScriptRoot/Compose.ps1" stop $Service
+try {
+    & dotnet run --project (Join-Path $projectRoot 'tools/SqliteMigration/SqliteMigration.csproj') -- --replay $Service $SinceUtc.ToUniversalTime().ToString('o') $databasePath
+    if ($LASTEXITCODE -ne 0) { throw 'Replay failed.' }
+} finally { & "$PSScriptRoot/Compose.ps1" start $Service }

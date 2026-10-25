@@ -1,5 +1,6 @@
 # Works with Docker Desktop, or the standalone official Compose binary from Setup-Compose.ps1.
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($env:COMPOSE_PARALLEL_LIMIT)) { $env:COMPOSE_PARALLEL_LIMIT = '2' }
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {

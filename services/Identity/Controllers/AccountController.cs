@@ -93,8 +93,14 @@ public class AccountController : Controller
     
         // GET: Account/Login
         [AllowAnonymous]
-        public IActionResult Login()
+        public IActionResult Login(string? returnUrl = null)
         {
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                if (User.IsInRole("Admin")) return Redirect("/Admin/Dashboard");
+                if (Url.IsLocalUrl(returnUrl)) return LocalRedirect(returnUrl!);
+                return Redirect("/Home/Index");
+            }
             return View();
         }
 

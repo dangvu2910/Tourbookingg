@@ -10,6 +10,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public string EventSource { get; set; } = "standalone";
     public bool EventsEnabled { get; set; }
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public bool ApplyingProjection { get; set; }
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IConfiguration? configuration = null)
         : base(options)
     {
@@ -29,6 +31,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<InboxMessage>().HasKey(x => x.Id);
         builder.Entity<OutboxMessage>().HasKey(m => m.Id);
         builder.Entity<OutboxMessage>().Property(m => m.Source).HasMaxLength(40);
         builder.Entity<OutboxMessage>().Property(m => m.Type).HasMaxLength(100);
@@ -115,17 +118,40 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(r => r.UserId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        
+        if (Database.IsSqlite())
+        {
+            builder.Entity<Booking>().Property(b => b.Version).IsConcurrencyToken().ValueGeneratedNever();
+            builder.Entity<Payment>().Property(p => p.Version).IsConcurrencyToken().ValueGeneratedNever();
+            // Keep exact monetary values and make ordering/comparisons translatable on SQLite.
+            builder.Entity<Tour>().Property(t => t.Price).HasConversion<long>(v => (long)(v * 100m), v => v / 100m);
+            builder.Entity<Booking>().Property(b => b.TotalPrice).HasConversion<long>(v => (long)(v * 100m), v => v / 100m);
+            builder.Entity<Payment>().Property(p => p.Amount).HasConversion<long>(v => (long)(v * 100m), v => v / 100m);
+            foreach (var fk in builder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()).ToList())
+                if (ServiceData.Owner(fk.DeclaringEntityType.GetTableName()!) != ServiceData.Owner(fk.PrincipalEntityType.GetTableName()!))
+                    fk.DeleteBehavior = DeleteBehavior.ClientNoAction;
+        }
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         ChangeTracker.DetectChanges();
+        if (!ApplyingProjection && Database.IsSqlite())
+        {
+            foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            {
+                var table = entry.Metadata.GetTableName()!;
+                if (ServiceData.Owner(table) != "" && !ServiceData.IsOwned(EventSource, entry.Metadata))
+                    throw new InvalidOperationException($"{EventSource} cannot write {table}; owner is {ServiceData.Owner(table)}.");
+                if (entry.State != EntityState.Deleted && entry.Entity is Booking or Payment)
+                    entry.Property("Version").CurrentValue = Guid.NewGuid().ToByteArray();
+            }
+        }
+        if (ApplyingProjection) return await base.SaveChangesAsync(cancellationToken);
         var changed = ChangeTracker.Entries()
             .Where(e => EventsEnabled && (e.State == EntityState.Added || e.State == EntityState.Modified)
-                && (e.Entity is Booking || e.Entity is Payment || e.Entity is ContactInquiry))
+                && (e.Entity is Booking || e.Entity is Payment || e.Entity is ContactInquiry || e.Entity is ContactInquiryReply))
             .Select(e => (e.Entity, Added: e.State == EntityState.Added,
-                StatusChanged: e.State == EntityState.Added || e.Property("Status").IsModified))
+                StatusChanged: e.State == EntityState.Added || e.Entity is ContactInquiryReply || e.Property("Status").IsModified))
             .Where(e => e.StatusChanged || e.Entity is Booking).ToList();
         if (changed.Count == 0) return await base.SaveChangesAsync(cancellationToken);
 
@@ -141,11 +167,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                     Booking b => ("booking", b.BookingId.ToString(), b.UserId, b.Email, b.Status),
                     Payment p => ("payment", p.PaymentId.ToString(), p.UserId, (string?)null, p.Status),
                     ContactInquiry c => ("contact", c.ContactInquiryId.ToString(), c.UserId, c.Email, c.Status),
+                    ContactInquiryReply r => ("contact.reply", r.ContactInquiryId.ToString(),
+                        ContactInquiries.Find(r.ContactInquiryId)?.UserId, (string?)null, r.IsFromAdmin ? "AdminReplied" : "CustomerReplied"),
                     _ => throw new InvalidOperationException()
                 };
                 var evt = new IntegrationEvent(Guid.NewGuid(), $"{kind}.{(added ? "created" : "updated")}",
                     EventSource, id, userId, email, status, DateTime.UtcNow,
-                    Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"));
+                    Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
+                    entity is Booking booking ? JsonSerializer.Serialize(new BookingEventData(booking.BookingId, booking.UserId, booking.TotalPrice, booking.Status))
+                    : entity is Payment payment ? JsonSerializer.Serialize(new PaymentEventData(payment.BookingId)) : null);
                 OutboxMessages.Add(new OutboxMessage
                 {
                     Id = evt.EventId, Source = evt.Source, Type = evt.Type,
