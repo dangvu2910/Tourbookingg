@@ -4,8 +4,24 @@ namespace Tourbooking.Distributed;
 public static class ServiceBoundary
 {
     public static readonly string[] Services = ["identity", "catalog", "booking", "notification", "payment", "review", "support", "reporting"];
+    public static readonly string[] Backends = ["identity", "catalog", "booking-platform", "customer-experience", "notification"];
 
-    // Each backend compiles its own controllers; no runtime action filtering is needed.
+    public static string[] Owners(string backend) => backend switch
+    {
+        "booking-platform" => ["booking", "payment", "reporting"],
+        "customer-experience" => ["review", "support"],
+        "identity" or "catalog" or "notification" => [backend],
+        _ => []
+    };
+
+    public static string BackendFor(string service) => service switch
+    {
+        "payment" or "reporting" => "booking-platform",
+        "review" or "support" => "customer-experience",
+        _ => service
+    };
+
+    // These owners select actions from the logical service assemblies loaded by each backend.
     public static readonly IReadOnlyDictionary<string, string> ActionOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["Account/Bookings"] = "booking", ["Account/CancelBooking"] = "booking", ["Account/RescheduleBooking"] = "booking",
@@ -29,4 +45,3 @@ public static class ServiceBoundary
         _ => "catalog"
     };
 }
-

@@ -2,9 +2,9 @@
 
 ## Mục tiêu và phạm vi
 
-Bản này phục vụ chạy local, đồ án và thử nghiệm tải nhỏ. Mỗi backend có file SQLite và thư mục bind mount riêng. Không có service nào mount database của service khác. Không cần container SQL Server để chạy ứng dụng sau chuyển đổi; RabbitMQ vẫn được giữ.
+Bản này phục vụ chạy local, đồ án và thử nghiệm tải nhỏ. Năm backend vật lý có file SQLite và thư mục bind mount riêng. Không có backend nào mount database của backend khác. Không cần container SQL Server để chạy ứng dụng; RabbitMQ vẫn được giữ.
 
-Giữ 9 thành phần ứng dụng hiện có (Gateway + 8 backend), không tự gom Review hoặc Reporting. Gateway không sở hữu dữ liệu nghiệp vụ nên không tạo database rỗng chỉ để đủ số lượng.
+Gateway giữ nguyên URL công khai; các logical owner được gom như sau: Booking + Payment + Reporting thành Booking Platform, Review + Support thành Customer Experience. Identity, Catalog và Notification vẫn là backend riêng. Gateway không sở hữu dữ liệu nghiệp vụ.
 
 ## Quyền sở hữu và bản sao đọc
 
@@ -21,7 +21,9 @@ Giữ 9 thành phần ứng dụng hiện có (Gateway + 8 backend), không tự
 | Support | Identity |
 | Reporting | Identity, Catalog, Booking, Payment, Review |
 
-Các bản sao được thay thế trong transaction qua API `/internal/data` trước khi action chạy. API yêu cầu `X-Service-Key` từ `.env`; Gateway chặn `/internal` và bỏ header nội bộ do trình duyệt gửi. PasswordHash chỉ tồn tại trong Identity; token và đăng nhập ngoài không được sao chép sang backend khác.
+Sau khi gom, Booking Platform dùng chung các bản sao cần thiết cho Booking/Payment/Reporting; Customer Experience dùng bản sao phục vụ Review/Support. Các endpoint nội bộ xuất dữ liệu theo logical owner để không làm lộ nhầm dữ liệu giữa bảng.
+
+Các bản sao được thay thế trong transaction qua API `/internal/data/{owner}` trước khi action chạy. API yêu cầu `X-Service-Key` từ `.env`; Gateway chặn `/internal` và bỏ header nội bộ do trình duyệt gửi. PasswordHash chỉ tồn tại trong Identity; token và đăng nhập ngoài không được sao chép sang backend khác.
 
 Nếu nguồn HTTP tạm ngắt, action dùng bản sao gần nhất và ghi warning. Lỗi dữ liệu/schema không bị che giấu thành dữ liệu rỗng. Đây là cơ chế đơn giản cho dữ liệu demo, không phải giải pháp đồng bộ toàn bộ bảng phù hợp tải lớn. Chưa tách hoàn toàn model theo bounded context; các bảng không dùng có thể vẫn hiện diện nhưng rỗng vì dùng schema chung.
 
@@ -53,11 +55,11 @@ Notification chỉ ACK sau khi lưu vào SQLite. EventId là khóa duy nhất ch
 ./scripts/Migrate-ToSqlite.ps1
 ```
 
-Script build công cụ trước, dừng các writer/consumer, backup hai database nguồn vào volume backup SQL Server rồi chạy công cụ trong cùng mạng Docker. Thông tin kết nối lấy từ môi trường, không in mật khẩu.
+Script build công cụ trước, dừng các writer/consumer, backup hai database nguồn vào volume backup SQL Server rồi chạy công cụ trong cùng mạng Docker. Kết quả được kiểm tra và phân phối thành 5 database backend. Thông tin kết nối lấy từ môi trường, không in mật khẩu.
 
 Công cụ đọc dữ liệu bằng provider SQL Server, tạo schema SQLite mới, giữ nguyên ID, password hash, ngày giờ, nội dung hội thoại, trạng thái giao dịch và thông báo. Tiền được lưu bằng số nguyên có hệ số 100 để giữ chính xác hai chữ số thập phân. Rowversion cũ được giữ lúc nhập; những lần sửa tiếp theo dùng token byte do ứng dụng sinh và EF kiểm tra chống ghi đè.
 
-Mỗi bảng được đối chiếu số bản ghi và SHA-256 của giá trị đã chuẩn hóa. Giá trị số `1.00` và `1` được coi là tương đương; chuỗi, ID và byte array vẫn so sánh chính xác. Chạy `PRAGMA integrity_check` cho từng database nghiệp vụ. Bản ghi Outbox cũ được chia theo Source, giữ nguyên trạng thái đã publish và lưu thêm archive JSON. Metadata lịch sử EF migration SQL Server không phải schema migration SQLite.
+Mỗi bảng được đối chiếu số bản ghi và SHA-256 của giá trị đã chuẩn hóa. Giá trị số `1.00` và `1` được coi là tương đương; chuỗi, ID và byte array vẫn so sánh chính xác. Chạy `PRAGMA integrity_check` cho từng database backend. Bản ghi Outbox cũ được chia theo Source, giữ nguyên trạng thái đã publish và lưu thêm archive JSON. Metadata lịch sử EF migration SQL Server không phải schema migration SQLite.
 
 Chỉ sau khi kiểm tra thành công, thư mục staging mới được đổi thành `data/sqlite`. Nếu lỗi, giữ staging để kiểm tra, không ghi đè bản đang dùng. Không chạy ứng dụng SQLite vào bản chuyển dở. Có thể dùng `-Destination data/sqlite-trial-2` để tạo bản thử khác; khi chạy Compose cần đổi bind mount sang thư mục đó nếu muốn sử dụng.
 
@@ -74,10 +76,10 @@ Nếu nguồn khác mặc định, truyền `MIGRATION_SQL_CONNECTION` và `MIGR
 
 ## Backup và khôi phục
 
-Dừng toàn bộ backend trước khi sao chép các thư mục `services/<Service>/data` để không bỏ sót WAL hoặc lệch trạng thái giữa service. Giữ cả auth keys, ảnh tour và cấu hình RabbitMQ nếu muốn khôi phục hệ thống đầy đủ. Không copy riêng file `.db` của một tiến trình đang ghi.
+Dừng toàn bộ backend trước khi sao chép các thư mục `services/<Backend>/data` để không bỏ sót WAL hoặc lệch trạng thái giữa service. Giữ cả auth keys, ảnh tour và cấu hình RabbitMQ nếu muốn khôi phục hệ thống đầy đủ. Không copy riêng file `.db` của một tiến trình đang ghi.
 
 Database SQL Server gốc và image phiên bản cũ là đường quay lại dữ liệu trước chuyển đổi. Dữ liệu phát sinh sau khi chạy SQLite không tự đồng bộ ngược sang SQL Server. `compose.sqlserver.yaml` chỉ lưu cấu hình nguồn; không build code SQLite hiện tại rồi coi đó là bản ứng dụng SQL Server.
 
-Database hiện nằm tại `services/<Service>/data/<service>.db`, ví dụ `services/Booking/data/booking.db`. Các thư mục này bị loại khỏi Git và Docker build context. Khi chạy Docker, mỗi thư mục vẫn mount vào `/data` của đúng service. Báo cáo migration cũ vẫn giữ tại `data/sqlite/migration-report.json`.
+Database hiện nằm tại `services/<Backend>/data/<backend>.db`, ví dụ `services/BookingPlatform/data/booking-platform.db`. Các thư mục dữ liệu bị loại khỏi Git và Docker build context. Báo cáo migration cũ vẫn giữ tại `data/sqlite/migration-report.json`.
 
-Migration mặc định chuyển dữ liệu đã kiểm chứng vào từng service. Dùng `-ExportOnly -Destination data/sqlite-trial-2` nếu chỉ muốn xuất một bản thử riêng, không cài vào service. Backup gom tám thư mục database vào cấu trúc `sqlite/<service>` trong bản backup; Restore phân phối lại vào từng service.
+Migration mặc định chuyển dữ liệu đã kiểm chứng vào 5 backend. Dùng `-ExportOnly -Destination data/sqlite-trial-2` nếu chỉ muốn xuất một bản thử riêng, không cài vào service. Backup gom 5 database backend vào cấu trúc `sqlite/<backend>`; Restore cũng chuyển đổi được backup 8 database đời cũ.

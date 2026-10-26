@@ -172,7 +172,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                     _ => throw new InvalidOperationException()
                 };
                 var evt = new IntegrationEvent(Guid.NewGuid(), $"{kind}.{(added ? "created" : "updated")}",
-                    EventSource, id, userId, email, status, DateTime.UtcNow,
+                    ServiceData.Owner(entity switch
+                    {
+                        Booking => "Bookings",
+                        Payment => "Payments",
+                        ContactInquiry => "ContactInquiries",
+                        ContactInquiryReply => "ContactInquiryReplies",
+                        _ => throw new InvalidOperationException()
+                    }), id, userId, email, status, DateTime.UtcNow,
                     Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
                     entity is Booking booking ? JsonSerializer.Serialize(new BookingEventData(booking.BookingId, booking.UserId, booking.TotalPrice, booking.Status))
                     : entity is Payment payment ? JsonSerializer.Serialize(new PaymentEventData(payment.BookingId)) : null);

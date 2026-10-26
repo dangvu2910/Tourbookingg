@@ -96,7 +96,7 @@ public class DistributedWorkflowTests
         using (var contact = await client.GetAsync("/Home/Contact"))
         {
             Assert.Equal(HttpStatusCode.Redirect, contact.StatusCode);
-            Assert.Equal("support", contact.Headers.GetValues("X-Service-Name").Single());
+            Assert.Equal("customer-experience", contact.Headers.GetValues("X-Service-Name").Single());
             Assert.Contains("/Account/Login", contact.Headers.Location?.ToString());
         }
         foreach (var path in new[] { "/api/identity/me", "/api/bookings", "/api/notifications" })
@@ -109,15 +109,15 @@ public class DistributedWorkflowTests
     }
 
     [Fact]
-    public async Task ExtractedServicesOwnTheirPagesAndDoNotExposeForeignControllers()
+    public async Task GroupedServicesExposeTheirModulesThroughLegacyAliases()
     {
         using var client = NewClient();
         foreach (var (path, service) in new[]
         {
-            ("/Home/Payment?bookingId=1", "payment"), ("/Account/Reviews", "review"),
-            ("/Admin/Contacts", "support"), ("/Admin/Dashboard", "reporting"),
-            ("/Admin/ExportUsers", "reporting"), ("/Admin/ExportToursExcel", "reporting"),
-            ("/Admin/ExportBookingsExcel", "reporting")
+            ("/Home/Payment?bookingId=1", "booking-platform"), ("/Account/Reviews", "customer-experience"),
+            ("/Admin/Contacts", "customer-experience"), ("/Admin/Dashboard", "booking-platform"),
+            ("/Admin/ExportUsers", "booking-platform"), ("/Admin/ExportToursExcel", "booking-platform"),
+            ("/Admin/ExportBookingsExcel", "booking-platform")
         })
         {
             using var response = await client.GetAsync(path);
@@ -128,13 +128,13 @@ public class DistributedWorkflowTests
         using var backend = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
         foreach (var url in new[]
         {
-            "http://payment:8080/Home/Booking", "http://review:8080/Account/Login",
-            "http://support:8080/Admin/Users", "http://reporting:8080/Admin/UpdateBookingStatus",
-            "http://booking:8080/Home/Payment", "http://catalog:8080/Home/Contact"
+            "http://payment:8080/Home/Booking", "http://booking:8080/Home/Payment",
+            "http://review:8080/Admin/Contacts", "http://support:8080/Account/Reviews",
+            "http://reporting:8080/Admin/Bookings"
         })
         {
             using var response = await backend.GetAsync(url);
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         var accountPage = await client.GetStringAsync("/Account/AccessDenied");
@@ -209,7 +209,7 @@ public class DistributedWorkflowTests
             ["__RequestVerificationToken"] = Field(adminPage, "__RequestVerificationToken")
         }));
         Assert.Equal(HttpStatusCode.Redirect, loggedIn.StatusCode);
-        foreach (var (path, service) in new[] { ("/Admin/Users", "identity"), ("/Admin/Tours", "catalog"), ("/Admin/Bookings", "booking"), ("/Admin/Contacts", "support"), ("/Admin/Dashboard", "reporting") })
+        foreach (var (path, service) in new[] { ("/Admin/Users", "identity"), ("/Admin/Tours", "catalog"), ("/Admin/Bookings", "booking-platform"), ("/Admin/Contacts", "customer-experience"), ("/Admin/Dashboard", "booking-platform") })
         {
             using var response = await admin.GetAsync(path);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);

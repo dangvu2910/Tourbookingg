@@ -13,11 +13,11 @@ x-app-env: &app-env
   Service__TrustGateway: "true"
   Services__identity: http://identity:8080
   Services__catalog: http://catalog:8080
-  Services__booking: http://booking:8080
-  Services__payment: http://payment:8080
-  Services__review: http://review:8080
-  Services__support: http://support:8080
-  Services__reporting: http://reporting:8080
+  Services__booking: http://booking-platform:8080
+  Services__payment: http://booking-platform:8080
+  Services__review: http://customer-experience:8080
+  Services__support: http://customer-experience:8080
+  Services__reporting: http://booking-platform:8080
   Services__notification: http://notification:8080
   Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
 
@@ -78,75 +78,35 @@ services:
     depends_on:
       identity: { condition: service_healthy }
 
-  booking:
+  booking-platform:
     <<: *app
     volumes:
-      - ./services/Booking/data:/data
+      - ./services/BookingPlatform/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     build:
       context: .
-      args: { SERVICE: Booking }
+      args: { SERVICE: BookingPlatform }
     environment:
       <<: *app-env
     depends_on:
       identity: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
 
-  payment:
+  customer-experience:
     <<: *app
     build:
       context: .
-      args: { SERVICE: Payment }
+      args: { SERVICE: CustomerExperience }
     environment:
       <<: *app-env
     volumes:
-      - ./services/Payment/data:/data
+      - ./services/CustomerExperience/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     depends_on:
       identity: { condition: service_healthy }
-
-  review:
-    <<: *app
-    build:
-      context: .
-      args: { SERVICE: Review }
-    environment:
-      <<: *app-env
-    volumes:
-      - ./services/Review/data:/data
-      - auth-keys:/keys
-      - tour-images:/app/wwwroot/images
-    depends_on:
-      identity: { condition: service_healthy }
-
-  support:
-    <<: *app
-    build:
-      context: .
-      args: { SERVICE: Support }
-    environment:
-      <<: *app-env
-    volumes:
-      - ./services/Support/data:/data
-      - auth-keys:/keys
-      - tour-images:/app/wwwroot/images
-    depends_on:
-      identity: { condition: service_healthy }
-
-  reporting:
-    <<: *app
-    build:
-      context: .
-      args: { SERVICE: Reporting }
-    environment:
-      <<: *app-env
-    volumes:
-      - ./services/Reporting/data:/data
-      - auth-keys:/keys
-      - tour-images:/app/wwwroot/images
-    depends_on:
-      identity: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
 
   notification:
     <<: *app
@@ -171,20 +131,17 @@ services:
     environment:
       Services__identity: http://identity:8080
       Services__catalog: http://catalog:8080
-      Services__booking: http://booking:8080
-      Services__payment: http://payment:8080
-      Services__review: http://review:8080
-      Services__support: http://support:8080
-      Services__reporting: http://reporting:8080
+      Services__booking: http://booking-platform:8080
+      Services__payment: http://booking-platform:8080
+      Services__review: http://customer-experience:8080
+      Services__support: http://customer-experience:8080
+      Services__reporting: http://booking-platform:8080
       Services__notification: http://notification:8080
     depends_on:
       identity: { condition: service_healthy }
       catalog: { condition: service_healthy }
-      booking: { condition: service_healthy }
-      payment: { condition: service_healthy }
-      review: { condition: service_healthy }
-      support: { condition: service_healthy }
-      reporting: { condition: service_healthy }
+      booking-platform: { condition: service_healthy }
+      customer-experience: { condition: service_healthy }
       notification: { condition: service_healthy }
 
   tests:

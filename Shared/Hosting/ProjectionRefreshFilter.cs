@@ -9,7 +9,9 @@ public sealed class ProjectionRefreshFilter(ApplicationDbContext db, IHttpClient
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        foreach (var owner in ServiceData.Services.Where(owner => ServiceData.Needs(db.EventSource, owner)))
+        var ownedServices = ServiceData.OwnedServices(db.EventSource);
+        foreach (var owner in ServiceData.Services.Where(owner =>
+            !ownedServices.Contains(owner) && ownedServices.Any(service => ServiceData.Needs(service, owner))))
         {
             try
             {
@@ -17,7 +19,8 @@ public sealed class ProjectionRefreshFilter(ApplicationDbContext db, IHttpClient
                 client.Timeout = TimeSpan.FromSeconds(4);
                 client.DefaultRequestHeaders.Add("X-Service-Key", config["Services:InternalKey"]);
                 var url = config[$"Services:{owner}"] ?? $"http://localhost:{5101 + Array.IndexOf(ServiceBoundary.Services, owner)}";
-                var tables = await client.GetFromJsonAsync<List<TableSnapshot>>(url + "/internal/data", context.HttpContext.RequestAborted);
+                var tables = await client.GetFromJsonAsync<List<TableSnapshot>>(
+                    url + "/internal/data/" + owner, context.HttpContext.RequestAborted);
                 await ProjectionStore.ReplaceAsync(db, tables!, context.HttpContext.RequestAborted);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)

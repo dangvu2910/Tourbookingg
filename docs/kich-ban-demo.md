@@ -7,7 +7,7 @@ Từ PowerShell tại thư mục dự án, chạy `.\scripts\Initialize-Environm
 ## Trình bày trong 10 đến 12 phút
 
 1. **Bài toán và mục tiêu, 1 phút:** website đặt tour; tách tiến trình để xử lý chức năng riêng; thông báo bất đồng bộ không chặn đặt tour.
-2. **Kiến trúc, 2 phút:** trình bày sơ đồ trong báo cáo. Có Gateway, 8 backend và RabbitMQ. Mỗi backend sở hữu một file SQLite riêng; Gateway không có database. Các service vẫn dùng chung thư viện/model và một số bản sao đọc, nên chưa độc lập hoàn toàn theo bounded context.
+2. **Kiến trúc, 2 phút:** trình bày sơ đồ trong báo cáo. Có Gateway, 5 backend và RabbitMQ. Booking + Payment + Reporting cùng backend/file SQLite; Review + Support cùng backend/file SQLite. Các chức năng và URL cũ vẫn giữ. Gateway không có database; các project vẫn dùng chung thư viện/model và một số bản sao đọc.
 3. **Luồng nghiệp vụ, 2 phút:** đăng ký khách hàng, chọn tour, đặt cho ngày trong tương lai, mở QR thanh toán và báo đã chuyển khoản. Đăng nhập Admin trong cửa sổ riêng để xác nhận. Kiểm tra đơn Confirmed và thông báo mới.
 4. **Giao tiếp và định danh, 1 phút:** mở `/api/identity/me`, `/api/bookings`, `/api/notifications`. Chỉ GUID event, Docker DNS và correlation ID trong log; giải thích cookie được chia sẻ giữa các dịch vụ.
 5. **Đồng bộ, 1 phút:** trình bày test booking idempotency và rowversion. Giải thích giao dịch outbox và vì sao publisher có thể gửi lại nhưng thông báo không bị nhân đôi.

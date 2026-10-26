@@ -4,7 +4,7 @@ COPY . .
 RUN dotnet restore Tourbooking.sln
 FROM source AS build
 ARG SERVICE
-RUN dotnet publish services/${SERVICE}/${SERVICE}.csproj -c Release -o /publish --no-restore
+RUN dotnet publish services/${SERVICE}/${SERVICE}.csproj -c Release -o /publish --no-restore -m:1
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app

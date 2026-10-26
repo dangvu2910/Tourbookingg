@@ -15,22 +15,16 @@ flowchart TB
     U[Trình duyệt] --> G[Gateway YARP]
     G --> I[Identity]
     G --> C[Catalog]
-    G --> B[Booking]
-    G --> P[Payment]
-    G --> R[Review]
-    G --> S[Support]
-    G --> RP[Reporting]
+    G --> BP[Booking Platform]
+    G --> CX[Customer Experience]
     G --> N[Notification API]
     I --> ID[(Identity SQLite)]
     C --> CD[(Catalog SQLite)]
-    B --> BD[(Booking SQLite)]
-    P --> PD[(Payment SQLite)]
-    R --> RD[(Review SQLite)]
-    S --> SD[(Support SQLite)]
-    RP --> RPD[(Reporting SQLite)]
+    BP --> BPD[(Booking Platform SQLite)]
+    CX --> CXD[(Customer Experience SQLite)]
     N --> ND[(Notification SQLite)]
-    B -->|Outbox worker| Q[RabbitMQ topic exchange]
-    Q -->|Consumer + inbox| P
+    BP -->|Outbox worker| Q[RabbitMQ topic exchange]
+    Q -->|Consumer + inbox| BP
     Q -->|Consumer + inbox| N
     S -->|Outbox worker| Q
     Q -->|contact events| N
@@ -40,9 +34,9 @@ flowchart TB
     K --- N
 ```
 
-Gateway định tuyến theo controller/action để giữ URL cũ. Identity xử lý xác thực và quản lý người dùng. Catalog sở hữu các endpoint quản lý tour. Booking xử lý đặt/hủy/đổi lịch. Payment xử lý yêu cầu thanh toán. Review xử lý đánh giá và bình chọn. Support xử lý tư vấn và phản hồi. Reporting xử lý dashboard và xuất Excel. Notification nhận sự kiện và lưu vào database riêng. Mỗi dịch vụ có project khởi động và container riêng, biên dịch controller và giao diện riêng; thư viện persistence và hạ tầng chung nằm trong Shared/.
+Gateway định tuyến theo controller/action để giữ URL cũ. Identity xử lý xác thực; Catalog sở hữu tour; Booking Platform gom đặt/hủy/đổi lịch, thanh toán, dashboard và xuất Excel; Customer Experience gom đánh giá, bình chọn, tư vấn và phản hồi; Notification nhận sự kiện. Có 5 backend vật lý với database riêng; các controller logic được nạp vào đúng host và lọc theo owner. Thư viện persistence và hạ tầng chung nằm trong Shared/.
 
-Mỗi backend có file SQLite riêng; Gateway không sở hữu database. Các dịch vụ nghiệp vụ ghi dữ liệu thuộc miền của mình và trao đổi thay đổi qua HTTP nội bộ hoặc RabbitMQ. Để giữ giao diện và báo cáo hiện có, một số service duy trì bản sao chỉ đọc được làm mới từ service nguồn. Các project vẫn dùng chung model EF và thư viện hạ tầng; đây là kiến trúc ứng dụng phân tán phù hợp demo/đồ án, chưa phải các microservice độc lập hoàn toàn theo bounded context.
+Mỗi backend vật lý có file SQLite riêng; Booking/Payment/Reporting chia sẻ file, Review/Support chia sẻ file nhưng mỗi logical owner chỉ ghi bảng của mình. Gateway không sở hữu database. Một số bản sao chỉ đọc được làm mới từ service nguồn. Các project vẫn dùng chung model EF và thư viện hạ tầng; đây là kiến trúc phù hợp demo/đồ án, chưa phải microservice độc lập hoàn toàn theo bounded context.
 
 ## Chương 3 Tiến trình và luồng
 
@@ -52,13 +46,13 @@ Mỗi container ứng dụng là một tiến trình ASP.NET Core. Request HTTP 
 sequenceDiagram
     actor Khach as Khách hàng
     participant G as Gateway
-    participant B as Booking
-    participant DB as Booking SQLite
+    participant B as Booking Platform
+    participant DB as Booking Platform SQLite
     participant W as Outbox Worker
     participant R as RabbitMQ
     participant N as Notification
-    participant P as Payment
-    participant PD as Payment SQLite
+    participant P as Payment workflow
+    participant PD as Booking Platform SQLite
     participant ND as Notification SQLite
     Khach->>G: POST /Home/Booking + CSRF + RequestId
     G->>B: Chuyển tiếp cookie và request
@@ -70,7 +64,7 @@ sequenceDiagram
     R-->>W: Publisher confirm
     W->>DB: Đánh dấu PublishedAt
     R->>P: Deliver booking event
-    P->>PD: Ghi Payment và inbox
+    P->>PD: Ghi Payment và inbox trong cùng database
     P->>R: ACK sau commit
     R->>N: Deliver notification event
     N->>ND: INSERT thông báo vào database riêng
@@ -105,9 +99,9 @@ Notification dùng khóa chính EventId như inbox đồng thời cũng là bả
 
 ## Chương 7 Sao lưu
 
-`scripts/Backup.ps1` dừng backend trước khi sao chép tám thư mục database SQLite, khóa cookie, ảnh tour và broker definitions; manifest SHA256 dùng để kiểm tra tính toàn vẹn. Container giữ dữ liệu qua bind mount hoặc named volume. Một máy/volume bị mất vẫn có thể làm mất dữ liệu nếu bản sao lưu chỉ nằm trên cùng thiết bị, vì vậy cần sao chép thư mục backup ra thiết bị hoặc storage riêng.
+`scripts/Backup.ps1` dừng backend trước khi sao chép năm thư mục database SQLite, khóa cookie, ảnh tour và broker definitions; manifest SHA256 dùng để kiểm tra tính toàn vẹn. Container giữ dữ liệu qua bind mount hoặc named volume. Một máy/volume bị mất vẫn có thể làm mất dữ liệu nếu bản sao lưu chỉ nằm trên cùng thiết bị, vì vậy cần sao chép thư mục backup ra thiết bị hoặc storage riêng.
 
-`scripts/Restore.ps1` kiểm tra checksum trước khi thao tác, dừng các dịch vụ ứng dụng, giữ dữ liệu hiện tại ở thư mục riêng, phân phối lại tám database và khôi phục các file, rồi tạo lại container. Tham số `-Apply` là xác nhận rõ ràng thao tác thay dữ liệu. Có thể lên lịch Backup.ps1 bằng Windows Task Scheduler; dự án cung cấp script, chưa tự đăng ký lịch trên máy người dùng.
+`scripts/Restore.ps1` kiểm tra checksum trước khi thao tác, dừng các dịch vụ ứng dụng, giữ dữ liệu hiện tại ở thư mục riêng, khôi phục năm database và các file rồi tạo lại container. Backup tám database cũ được hợp nhất tự động trước khi cài. Tham số `-Apply` là xác nhận rõ ràng thao tác thay dữ liệu. Có thể lên lịch Backup.ps1 bằng Windows Task Scheduler; dự án cung cấp script, chưa tự đăng ký lịch trên máy người dùng.
 
 Broker definitions không chứa nội dung queue. Khi mất `rabbit-data`, có thể phát lại sự kiện còn trong outbox bằng `scripts/Replay-Outbox.ps1 -Service booking -SinceUtc ...`; ID sự kiện giữ nguyên để consumer loại bản trùng. Phải chọn thời điểm trước sự cố và kiểm tra dead-letter queue. Dữ liệu tạo sau mốc backup có thể không khôi phục được: RPO phụ thuộc lịch backup, RTO phụ thuộc kích thước dữ liệu và thời gian khởi động. Cần diễn tập restore định kỳ; checksum không thay thế kiểm tra khôi phục thực tế.
 

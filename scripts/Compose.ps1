@@ -7,6 +7,7 @@ try {
     $binary = Join-Path $root '.tools/docker-compose.exe'
     $ErrorActionPreference = 'Continue'
     if (Test-Path -LiteralPath $binary) { & $binary @args 2>&1 | ForEach-Object { $_.ToString() } }
+    elseif (Get-Command docker-compose -ErrorAction SilentlyContinue) { & docker-compose @args 2>&1 | ForEach-Object { $_.ToString() } }
     else { & docker compose @args 2>&1 | ForEach-Object { $_.ToString() } }
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose exited with code $LASTEXITCODE" }

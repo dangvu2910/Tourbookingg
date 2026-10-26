@@ -5,12 +5,14 @@ using Tourbooking.Models;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
+using System.Reflection;
 
 namespace Tourbooking.Distributed;
 
 public static class TourbookingHost
 {
-public static async Task RunAsync(string[] args, string service = "standalone")
+public static async Task RunAsync(string[] args, string service = "standalone", params string[] controllerAssemblies)
 {
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ApplicationName = System.Reflection.Assembly.GetEntryAssembly()!.GetName().Name });
 builder.Configuration["Service:Name"] = service;
@@ -18,8 +20,9 @@ builder.Configuration["Service:Name"] = service;
 // Add services to the container.
 var dataDirectory = builder.Configuration["Database:Directory"] ?? Path.Combine(builder.Environment.ContentRootPath, "data");
 Directory.CreateDirectory(dataDirectory);
+var databaseName = builder.Configuration["Database:Name"] ?? service;
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite(
-    $"Data Source={Path.Combine(dataDirectory, service + ".db")};Foreign Keys=False;Default Timeout=30"));
+    $"Data Source={Path.Combine(dataDirectory, databaseName + ".db")};Foreign Keys=False;Default Timeout=30"));
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
         options.Password.RequiredLength = 6;
@@ -59,17 +62,32 @@ builder.Services.ConfigureApplicationCookie(options =>
         return Task.CompletedTask;
     };
 });
-builder.Services.AddControllersWithViews(options =>
+var mvc = builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.Add<ConcurrencyFilter>();
     options.Filters.Add<ProjectionRefreshFilter>();
+    if (service is not ("standalone" or "identity" or "catalog" or "booking" or "payment" or "review" or "support" or "reporting" or "notification"))
+        options.Conventions.Add(new BackendActionConvention(service));
 });
+foreach (var assemblyName in controllerAssemblies)
+    mvc.AddApplicationPart(Assembly.Load(new AssemblyName(assemblyName)));
 builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.Routing.IUrlHelperFactory, ServiceUrlHelperFactory>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("sql", tags: ["ready"]);
 builder.Services.AddHttpClient();
 if ((service is "booking" or "payment") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
     builder.Services.AddHostedService<BookingPaymentConsumer>();
+if (service == "booking-platform" && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
+{
+    builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(provider =>
+        new BookingPaymentConsumer(provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<IConfiguration>(), provider.GetRequiredService<ILogger<BookingPaymentConsumer>>(), "booking"));
+    builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(provider =>
+        new BookingPaymentConsumer(provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<IConfiguration>(), provider.GetRequiredService<ILogger<BookingPaymentConsumer>>(), "payment"));
+}
 if ((service is "booking" or "payment" or "support" or "identity" or "catalog" or "review" or "standalone") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
+    builder.Services.AddHostedService<OutboxDispatcher>();
+if ((service is "booking-platform" or "customer-experience") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
     builder.Services.AddHostedService<OutboxDispatcher>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -97,8 +115,16 @@ app.MapGet("/service-info", () => new { service, node = Environment.MachineName 
 app.MapGet("/internal/data", async (HttpContext http, ApplicationDbContext db) =>
 {
     var key = builder.Configuration["Services:InternalKey"];
-    if (string.IsNullOrEmpty(key) || http.Request.Headers["X-Service-Key"] != key) return Results.Unauthorized();
+    if (string.IsNullOrEmpty(key) || http.Request.Headers["X-Service-Key"] != key
+        || !ServiceData.OwnedServices(service).Contains(service)) return Results.Unauthorized();
     return Results.Ok(await ProjectionStore.ExportAsync(db, service, ct: http.RequestAborted));
+});
+app.MapGet("/internal/data/{owner}", async (string owner, HttpContext http, ApplicationDbContext db) =>
+{
+    var key = builder.Configuration["Services:InternalKey"];
+    if (string.IsNullOrEmpty(key) || http.Request.Headers["X-Service-Key"] != key) return Results.Unauthorized();
+    if (!ServiceData.OwnedServices(service).Contains(owner)) return Results.NotFound();
+    return Results.Ok(await ProjectionStore.ExportAsync(db, owner, ct: http.RequestAborted));
 });
 
 // Configure the HTTP request pipeline.
@@ -145,6 +171,7 @@ if (service is "identity" or "standalone")
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await EnsureRolesAndAdminAsync(builder.Configuration, roleManager, userManager);
 }
+
 if (service is "catalog" or "standalone")
 {
     using var scope = app.Services.CreateScope();
@@ -208,6 +235,22 @@ static async Task EnsureRolesAndAdminAsync(
     }
 }
 
+public sealed class BackendActionConvention(string backend) : IApplicationModelConvention
+{
+    private readonly HashSet<string> owners = ServiceBoundary.Owners(backend).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+    public void Apply(ApplicationModel application)
+    {
+        foreach (var controller in application.Controllers.ToArray())
+        {
+            foreach (var action in controller.Actions.ToArray())
+                if (!owners.Contains(ServiceBoundary.Owner(controller.ControllerName, action.ActionName)))
+                    controller.Actions.Remove(action);
+            if (controller.Actions.Count == 0)
+                application.Controllers.Remove(controller);
+        }
+    }
 }
 
+
+}

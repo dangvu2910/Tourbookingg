@@ -7,11 +7,11 @@ using Tourbooking.Models;
 namespace Tourbooking.Distributed;
 
 public sealed class BookingPaymentConsumer(IServiceScopeFactory scopes, IConfiguration config,
-    ILogger<BookingPaymentConsumer> logger) : BackgroundService
+    ILogger<BookingPaymentConsumer> logger, string? workflowService = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        var service = config["Service:Name"]!;
+        var service = workflowService ?? config["Service:Name"]!;
         var queue = "tourbooking.workflow." + service;
         while (!ct.IsCancellationRequested)
         {
@@ -39,7 +39,7 @@ public sealed class BookingPaymentConsumer(IServiceScopeFactory scopes, IConfigu
                     {
                         var evt = JsonSerializer.Deserialize<IntegrationEvent>(delivery.Body.Span) ?? throw new JsonException();
                         using var scope = scopes.CreateScope();
-                        await HandleAsync(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), evt, config, ct);
+                        await HandleAsync(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), evt, config, ct, service);
                         await channel.BasicAckAsync(delivery.DeliveryTag, false, ct);
                     }
                     catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -75,11 +75,13 @@ public sealed class BookingPaymentConsumer(IServiceScopeFactory scopes, IConfigu
         }
     }
 
-    public static async Task HandleAsync(ApplicationDbContext db, IntegrationEvent evt, IConfiguration config, CancellationToken ct)
+    public static async Task HandleAsync(ApplicationDbContext db, IntegrationEvent evt, IConfiguration config,
+        CancellationToken ct, string? workflowService = null)
     {
+        var service = workflowService ?? db.EventSource;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         if (await db.InboxMessages.AnyAsync(x => x.Id == evt.EventId, ct)) return;
-        if (db.EventSource == "payment" && evt.Source == "booking")
+        if (service == "payment" && evt.Source == "booking")
         {
             // Old pre-migration events have no data. Current booking snapshots reconcile those separately.
             if (evt.Data != null)
@@ -100,7 +102,7 @@ public sealed class BookingPaymentConsumer(IServiceScopeFactory scopes, IConfigu
                     payment.Status = payment.Status is "Paid" or "RefundPending" ? "RefundPending" : "Cancelled";
             }
         }
-        else if (db.EventSource == "booking" && evt.Source == "payment")
+        else if (service == "booking" && evt.Source == "payment")
         {
             // Payment events carry BookingId explicitly, avoiding cross-database lookups.
             if (evt.Data != null)

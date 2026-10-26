@@ -1,6 +1,6 @@
-# Tour Booking — SQLite riêng cho từng service
+# Tour Booking — SQLite theo backend group
 
-Ứng dụng gồm Gateway và 8 backend. Mỗi backend có một file SQLite riêng, chỉ mount thư mục dữ liệu của chính mình. RabbitMQ chuyển sự kiện Booking–Payment và Support–Notification. Gateway không cần database.
+Ứng dụng gồm Gateway, RabbitMQ và 5 backend: Identity, Catalog, Booking Platform (Booking + Payment + Reporting), Customer Experience (Review + Support), Notification. Các chức năng vẫn giữ URL cũ; mỗi backend vật lý có một file SQLite riêng. Gateway không có database.
 
 ## Chạy với dữ liệu đã chuyển
 
@@ -20,7 +20,7 @@ Mở **http://localhost:8080**. Tài khoản và mật khẩu cũ được giữ
 
 SQL Server nguồn phải đang chạy. Script dừng các service ghi dữ liệu, tạo backup nguồn và chuyển vào thư mục staging. Chỉ khi đối chiếu thành công mới tạo thư mục đích `data/sqlite`. Không chạy lại vào thư mục đã có dữ liệu. Có thể chọn đích thử nghiệm khác bằng `-Destination data/sqlite-trial-2`.
 
-`data/sqlite/migration-report.json` chứa số bản ghi và checksum đã kiểm chứng. Database SQL Server gốc cùng volume backup được giữ lại. Công cụ không xóa hoặc tự thay dữ liệu nguồn bằng dữ liệu mẫu.
+`data/sqlite/migration-report.json` chứa số bản ghi và checksum đã kiểm chứng cho 5 backend. Database SQL Server gốc cùng volume backup được giữ lại. Công cụ không xóa hoặc tự thay dữ liệu nguồn bằng dữ liệu mẫu.
 
 ## Database riêng
 
@@ -28,14 +28,11 @@ SQL Server nguồn phải đang chạy. Script dừng các service ghi dữ li�
 | --- | --- | --- |
 | Identity | `services/Identity/data/identity.db` | Tài khoản, vai trò, thông tin đăng nhập |
 | Catalog | `services/Catalog/data/catalog.db` | Tour |
-| Booking | `services/Booking/data/booking.db` | Đơn đặt tour |
-| Payment | `services/Payment/data/payment.db` | Giao dịch |
-| Review | `services/Review/data/review.db` | Đánh giá và bình chọn |
-| Support | `services/Support/data/support.db` | Yêu cầu hỗ trợ và hội thoại |
-| Reporting | `services/Reporting/data/reporting.db` | Bản sao chỉ đọc phục vụ báo cáo |
+| Booking Platform | `services/BookingPlatform/data/booking-platform.db` | Đơn đặt tour, giao dịch; dashboard và xuất báo cáo |
+| Customer Experience | `services/CustomerExperience/data/customer-experience.db` | Đánh giá, bình chọn, yêu cầu hỗ trợ và hội thoại |
 | Notification | `services/Notification/data/notification.db` | Thông báo và khóa chống trùng |
 
-Mỗi service chỉ ghi bảng nghiệp vụ mình sở hữu. Để giữ các màn hình hiện có, backend còn có bản sao chỉ đọc của dữ liệu cần tham chiếu, làm mới qua HTTP nội bộ. Các service vẫn dùng chung model EF và thư viện persistence. Không dùng chung file database, nhưng chưa tách hoàn toàn model độc lập.
+Mỗi logical owner chỉ ghi bảng nghiệp vụ mình sở hữu; các owner được gom cùng backend chia sẻ một file SQLite. Để giữ màn hình hiện có, backend còn có bản sao chỉ đọc của dữ liệu cần tham chiếu, làm mới qua HTTP nội bộ. Các project vẫn dùng chung model EF và thư viện persistence, chưa tách hoàn toàn bounded context.
 
 Chi tiết luồng sự kiện, lý do thiết kế và giới hạn trong [kiến trúc SQLite](docs/kien-truc-sqlite.md).
 
@@ -62,6 +59,16 @@ Restore thay dữ liệu hiện tại và giữ bản cũ trong thư mục riên
 Khi chạy mới với database trống, có thể bật `Database__SeedDemo=true` riêng cho Catalog để tạo ba tour mẫu. Không bật seed khi muốn đối chiếu bản chuyển đổi chính xác.
 
 `compose.sqlserver.yaml` và [tài liệu SQL Server cũ](docs/legacy-sqlserver.md) được giữ để tham khảo nguồn. Rollback ứng dụng cần cả code/image cũ; dữ liệu mới trong SQLite không tự đồng bộ ngược sang SQL Server.
-Database hiện nằm tại `services/<Service>/data/<service>.db`, ví dụ `services/Booking/data/booking.db`. Các thư mục này bị loại khỏi Git và Docker build context. Khi chạy Docker, mỗi thư mục vẫn mount vào `/data` của đúng service. Báo cáo migration cũ vẫn giữ tại `data/sqlite/migration-report.json`.
+Database hiện nằm tại `services/<Backend>/data/<backend>.db`. Source của các backend đã gộp được đặt trong `services/BookingPlatform/Modules` và `services/CustomerExperience/Modules`; các database rời cũ đã bỏ sau khi xác minh backup trước gộp tại `backups/pre-consolidation-20261026-104448`.
 
-Migration mặc định chuyển dữ liệu đã kiểm chứng vào từng service. Dùng `-ExportOnly -Destination data/sqlite-trial-2` nếu chỉ muốn xuất một bản thử riêng, không cài vào service. Backup gom tám thư mục database vào cấu trúc `sqlite/<service>` trong bản backup; Restore phân phối lại vào từng service.
+Migration mặc định xuất dữ liệu đã kiểm chứng theo 5 backend. Dùng `-ExportOnly -Destination data/sqlite-trial-2` nếu chỉ muốn xuất một bản thử riêng, không cài vào service. Backup lưu 5 thư mục database trong `sqlite/<backend>`; Restore hỗ trợ cả backup 5 backend hiện tại và backup 8 database cũ.
+
+Để gom bộ SQLite đang chạy trước đây, tạo backup trước rồi chạy:
+
+```powershell
+.\scripts\Backup.ps1
+.\scripts\Consolidate-Sqlite.ps1 -BackupDirectory backups\ten-ban-backup
+.\scripts\Consolidate-Sqlite.ps1 -BackupDirectory backups\ten-ban-backup -Apply
+```
+
+Lần chạy đầu tạo bản staging đã qua `integrity_check` mà không đổi database hiện tại. Chỉ dùng `-Apply` sau khi kiểm tra staging và backup.

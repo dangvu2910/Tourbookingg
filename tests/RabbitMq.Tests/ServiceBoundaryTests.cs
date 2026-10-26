@@ -38,4 +38,18 @@ public class ServiceBoundaryTests
         }
         Assert.Equal(8, ServiceBoundary.Services.Distinct().Count());
     }
+
+    [Fact]
+    public void LogicalServicesMapToFivePhysicalBackends()
+    {
+        Assert.Equal(5, ServiceBoundary.Backends.Distinct().Count());
+        Assert.Equal("booking-platform", ServiceBoundary.BackendFor("payment"));
+        Assert.Equal("booking-platform", ServiceBoundary.BackendFor("reporting"));
+        Assert.Equal("customer-experience", ServiceBoundary.BackendFor("review"));
+        Assert.Equal("customer-experience", ServiceBoundary.BackendFor("support"));
+        Assert.Equal(new[] { "booking", "payment", "reporting" }, ServiceBoundary.Owners("booking-platform"));
+        Assert.Equal(new[] { "review", "support" }, ServiceBoundary.Owners("customer-experience"));
+        Assert.True(ServiceData.Needs("booking-platform", "catalog"));
+        Assert.True(ServiceData.Needs("customer-experience", "booking"));
+    }
 }

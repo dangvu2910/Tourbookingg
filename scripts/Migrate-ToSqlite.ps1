@@ -9,17 +9,24 @@ try {
     if ((Test-Path -LiteralPath $destinationPath) -and (Get-ChildItem -LiteralPath $destinationPath -Force | Select-Object -First 1)) {
         throw 'Destination is not empty. Existing SQLite data will not be overwritten. Choose a new destination.'
     }
-    $serviceNames = @('Identity','Catalog','Booking','Payment','Review','Support','Reporting','Notification')
+    $legacyServices = @('gateway','identity','catalog','booking','payment','review','support','reporting','notification')
+    $backends = @(
+        @{ Name='identity'; Folder='Identity' },
+        @{ Name='catalog'; Folder='Catalog' },
+        @{ Name='booking-platform'; Folder='BookingPlatform' },
+        @{ Name='customer-experience'; Folder='CustomerExperience' },
+        @{ Name='notification'; Folder='Notification' }
+    )
     if (-not $ExportOnly) {
-        foreach ($serviceName in $serviceNames) {
-            if (Test-Path -LiteralPath (Join-Path $projectRoot "services/$serviceName/data")) { throw "Target already exists: $serviceName/data. Use -ExportOnly for an isolated export." }
+        foreach ($backend in $backends) {
+            if (Test-Path -LiteralPath (Join-Path $projectRoot "services/$($backend.Folder)/data")) { throw "Target already exists: $($backend.Folder)/data. Use -ExportOnly for an isolated export." }
         }
     }
     & "$PSScriptRoot/Initialize-Environment.ps1"
     & docker build -f Dockerfile.migration -t tourbooking-sqlite-migration .
     if ($LASTEXITCODE -ne 0) { throw 'Migration image build failed; source applications have not been stopped.' }
     # Quiesce writers and consumers before taking a consistent source snapshot.
-    & "$PSScriptRoot/Compose.ps1" -f compose.sqlserver.yaml stop gateway identity catalog booking payment review support reporting notification
+    & "$PSScriptRoot/Compose.ps1" -f compose.sqlserver.yaml stop @legacyServices
     $sqlContainer = 'tourbooking-distributed-sqlserver-1'
     & docker exec --user 0 $sqlContainer mkdir -p /var/opt/mssql/backup
     & docker exec --user 0 $sqlContainer chown 10001:0 /var/opt/mssql/backup
@@ -39,15 +46,15 @@ try {
     if (Test-Path -LiteralPath $destinationPath) { throw 'Destination appeared during migration. Verified output remains in staging; nothing was overwritten.' }
     Move-Item -LiteralPath $stagingPath -Destination $destinationPath
     if (-not $ExportOnly) {
-        foreach ($serviceName in $serviceNames) {
-            $sourcePath = [IO.Path]::GetFullPath((Join-Path $destinationPath $serviceName.ToLowerInvariant()))
-            $targetPath = [IO.Path]::GetFullPath((Join-Path $projectRoot "services/$serviceName/data"))
-            $serviceRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot "services/$serviceName")) + [IO.Path]::DirectorySeparatorChar
+        foreach ($backend in $backends) {
+            $sourcePath = [IO.Path]::GetFullPath((Join-Path $destinationPath $backend.Name))
+            $targetPath = [IO.Path]::GetFullPath((Join-Path $projectRoot "services/$($backend.Folder)/data"))
+            $serviceRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot "services/$($backend.Folder)")) + [IO.Path]::DirectorySeparatorChar
             if (-not $sourcePath.StartsWith($destinationPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or -not $targetPath.StartsWith($serviceRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected install path.' }
             Move-Item -LiteralPath $sourcePath -Destination $targetPath
         }
     }
     Write-Host "Verified migration report: $destinationPath/migration-report.json"
-    Write-Host 'Start: ./scripts/Compose.ps1 up -d --build'
+    Write-Host 'Start: .\scripts\Compose.ps1 up -d --build'
     Write-Host 'Source SQL Server and backup volumes have been preserved.'
 } finally { Pop-Location }

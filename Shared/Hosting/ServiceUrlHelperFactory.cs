@@ -23,7 +23,7 @@ public sealed class ServiceUrlHelperFactory : IUrlHelperFactory
             var action = context.Action ?? Convert.ToString(ActionContext.RouteData.Values["action"], CultureInfo.InvariantCulture);
             if (string.IsNullOrEmpty(controller) || string.IsNullOrEmpty(action)) return inner.Action(context);
             var service = ActionContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["Service:Name"];
-            if (ServiceBoundary.Owner(controller, action) == service) return inner.Action(context);
+            if (ServiceBoundary.BackendFor(ServiceBoundary.Owner(controller, action)) == service) return inner.Action(context);
 
             var values = new RouteValueDictionary(context.Values);
             var path = $"{ActionContext.HttpContext.Request.PathBase}/{Uri.EscapeDataString(controller)}/{Uri.EscapeDataString(action)}";

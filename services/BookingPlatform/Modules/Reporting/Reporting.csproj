@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <PropertyGroup><DefaultItemExcludes>$(DefaultItemExcludes);Models/**</DefaultItemExcludes></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../Shared/Hosting/Tourbooking.Hosting.csproj" />
+    <ProjectReference Include="../../../../Shared/Presentation/Tourbooking.Presentation.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(IsConsolidatedHost)' == 'true'">
+    <Content Update="appsettings.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+</Project>

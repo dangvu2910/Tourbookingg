@@ -22,6 +22,14 @@ if (args.FirstOrDefault() == "--replay")
     return;
 }
 
+if (args.FirstOrDefault() == "--consolidate")
+{
+    if (args.Length != 3)
+        throw new ArgumentException("Usage: --consolidate <projectRoot> <emptyStagingDirectory>");
+    await ConsolidateSqliteAsync(args[1], args[2]);
+    return;
+}
+
 // Source credentials are environment-only and never included in output or reports.
 var sourceConnection = Environment.GetEnvironmentVariable("MIGRATION_SQL_CONNECTION");
 var notificationConnection = Environment.GetEnvironmentVariable("MIGRATION_NOTIFICATION_CONNECTION");
@@ -47,7 +55,7 @@ foreach (var owner in ServiceData.Services.Where(s => s != "reporting"))
 var outbox = await source.OutboxMessages.AsNoTracking().ToListAsync();
 var notifications = await notificationSource.Notifications.AsNoTracking().ToListAsync();
 var report = new List<object>();
-foreach (var service in ServiceData.Services)
+foreach (var service in ServiceBoundary.Backends.Where(s => s != "notification"))
 {
     var folder = Path.Combine(output, service);
     Directory.CreateDirectory(folder);
@@ -56,12 +64,14 @@ foreach (var service in ServiceData.Services)
         .UseSqlite($"Data Source={Path.Combine(folder, service + ".db")};Foreign Keys=False").Options, config);
     await target.Database.EnsureCreatedAsync();
     await using var tx = await target.Database.BeginTransactionAsync();
-    foreach (var (owner, tables) in snapshots.Where(s => s.Key == service || ServiceData.Needs(service, s.Key)))
+    var ownedServices = ServiceData.OwnedServices(service);
+    foreach (var (owner, tables) in snapshots.Where(s => ownedServices.Contains(s.Key)
+        || ownedServices.Any(serviceOwner => ServiceData.Needs(serviceOwner, s.Key))))
     {
         foreach (var original in tables)
         {
             var snapshot = original;
-            if (service != owner && original.Table.StartsWith("AspNet"))
+            if (!ownedServices.Contains(owner) && original.Table.StartsWith("AspNet"))
             {
                 if (original.Table is not ("AspNetUsers" or "AspNetRoles" or "AspNetUserRoles")) continue;
                 snapshot = original with { Rows = original.Rows.Select(row => row.ToDictionary(p => p.Key,
@@ -79,7 +89,8 @@ foreach (var service in ServiceData.Services)
         }
     }
     // Preserve historical events without automatically replaying published events.
-    var events = outbox.Where(m => m.Source == service || service == "booking" && !ServiceData.Services.Contains(m.Source)).ToList();
+    var events = outbox.Where(m => ownedServices.Contains(m.Source)
+        || service == "booking-platform" && !ServiceData.Services.Contains(m.Source)).ToList();
     target.OutboxMessages.AddRange(events);
     target.ApplyingProjection = true;
     await target.SaveChangesAsync();
@@ -110,3 +121,151 @@ static string Hash(List<Dictionary<string,JsonElement>> rows) => HashObjects(row
     JsonSerializer.Serialize(p.Key) + ":" + (p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetDecimal(out var number)
         ? number.ToString("G29", System.Globalization.CultureInfo.InvariantCulture) : p.Value.GetRawText())))));
 static string HashObjects<T>(IEnumerable<T> rows) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", rows.Select(r => JsonSerializer.Serialize(r)).Order(StringComparer.Ordinal)))));
+
+static async Task ConsolidateSqliteAsync(string projectRootArgument, string destinationArgument)
+{
+    static string Quote(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
+
+    var projectRoot = Path.GetFullPath(projectRootArgument);
+    var destination = Path.GetFullPath(destinationArgument);
+    if (Directory.Exists(destination) && Directory.EnumerateFileSystemEntries(destination).Any())
+        throw new InvalidOperationException("The staging directory must be empty.");
+
+    var sourcePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var service in new[] { "Identity", "Catalog", "Booking", "Payment", "Review", "Support", "Notification" })
+    {
+        var path = Path.Combine(projectRoot, "services", service, "data", service.ToLowerInvariant() + ".db");
+        if (!File.Exists(path))
+            path = Path.Combine(projectRoot, "sqlite", service.ToLowerInvariant(), service.ToLowerInvariant() + ".db");
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"Required {service} SQLite database was not found.", path);
+        sourcePaths[service] = path;
+    }
+
+    Directory.CreateDirectory(destination);
+    var destinations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var (backend, sourceService, databaseName) in new[]
+    {
+        ("identity", "Identity", "identity"),
+        ("catalog", "Catalog", "catalog"),
+        ("booking-platform", "Booking", "booking-platform"),
+        ("customer-experience", "Review", "customer-experience"),
+        ("notification", "Notification", "notification")
+    })
+    {
+        var folder = Path.Combine(destination, backend);
+        Directory.CreateDirectory(folder);
+        var targetPath = Path.Combine(folder, databaseName + ".db");
+        await using var source = new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = sourcePaths[sourceService], Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly }.ToString());
+        await source.OpenAsync();
+        await using (var backup = new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = targetPath }.ToString()))
+        {
+            await backup.OpenAsync();
+            source.BackupDatabase(backup);
+        }
+        destinations[backend] = targetPath;
+    }
+
+    var merged = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["booking-platform"] = ["Payments"],
+        ["customer-experience"] = ["TourReviews", "TourReviewVotes", "ContactInquiries", "ContactInquiryReplies"]
+    };
+    var mergeSources = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["booking-platform"] = [sourcePaths["Payment"]],
+        ["customer-experience"] = [sourcePaths["Support"]]
+    };
+    var report = new Dictionary<string, Dictionary<string, long>>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var backend in new[] { "booking-platform", "customer-experience" })
+    {
+        var targetPath = destinations[backend];
+        var tableCounts = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        await using var target = new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = targetPath }.ToString());
+        await target.OpenAsync();
+        using var transaction = target.BeginTransaction();
+        var mergeTables = merged[backend].Concat(["OutboxMessages", "InboxMessages"]).ToArray();
+        foreach (var sourcePath in mergeSources[backend])
+        {
+            await using var attach = target.CreateCommand();
+            attach.Transaction = transaction;
+            attach.CommandText = "ATTACH DATABASE $path AS legacy";
+            attach.Parameters.AddWithValue("$path", sourcePath);
+            await attach.ExecuteNonQueryAsync();
+
+            foreach (var table in mergeTables)
+            {
+                var columns = new List<string>();
+                await using (var schema = target.CreateCommand())
+                {
+                    schema.Transaction = transaction;
+                    schema.CommandText = $"PRAGMA legacy.table_info({Quote(table)})";
+                    await using var reader = await schema.ExecuteReaderAsync();
+                    while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
+                }
+                if (columns.Count == 0)
+                    throw new InvalidOperationException($"Missing {table} in source database {sourcePath}.");
+
+                var columnList = string.Join(", ", columns.Select(Quote));
+                if (table is "OutboxMessages" or "InboxMessages")
+                {
+                    var sameId = table == "OutboxMessages" ? "Id" : "Id";
+                    var different = string.Join(" OR ", columns.Select(column =>
+                        $"NOT (destination.{Quote(column)} IS legacy.{Quote(column)})"));
+                    await using var conflict = target.CreateCommand();
+                    conflict.Transaction = transaction;
+                    conflict.CommandText = $"SELECT COUNT(*) FROM main.{Quote(table)} AS destination JOIN legacy.{Quote(table)} AS legacy ON destination.{Quote(sameId)} = legacy.{Quote(sameId)} WHERE {different}";
+                    if (Convert.ToInt64(await conflict.ExecuteScalarAsync()) != 0)
+                        throw new InvalidOperationException($"Conflicting {table} IDs while merging {Path.GetFileName(sourcePath)}.");
+                    await using var merge = target.CreateCommand();
+                    merge.Transaction = transaction;
+                    merge.CommandText = $"INSERT OR IGNORE INTO main.{Quote(table)} ({columnList}) SELECT {columnList} FROM legacy.{Quote(table)}";
+                    await merge.ExecuteNonQueryAsync();
+                }
+                else
+                {
+                    await using var merge = target.CreateCommand();
+                    merge.Transaction = transaction;
+                    merge.CommandText = $"DELETE FROM main.{Quote(table)}; INSERT INTO main.{Quote(table)} ({columnList}) SELECT {columnList} FROM legacy.{Quote(table)}";
+                    await merge.ExecuteNonQueryAsync();
+                }
+            }
+
+        }
+
+        foreach (var table in mergeTables)
+        {
+            await using var count = target.CreateCommand();
+            count.Transaction = transaction;
+            count.CommandText = $"SELECT COUNT(*) FROM main.{Quote(table)}";
+            tableCounts[table] = Convert.ToInt64(await count.ExecuteScalarAsync());
+        }
+        await transaction.CommitAsync();
+
+        await using var integrity = target.CreateCommand();
+        integrity.CommandText = "PRAGMA integrity_check";
+        var result = (string?)await integrity.ExecuteScalarAsync();
+        if (result != "ok")
+            throw new InvalidOperationException($"SQLite integrity check failed for {backend}: {result}");
+        report[backend] = tableCounts;
+    }
+
+    foreach (var (backend, path) in destinations.Where(item => item.Key is "identity" or "catalog" or "notification"))
+    {
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = path, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly }.ToString());
+        await connection.OpenAsync();
+        await using var integrity = connection.CreateCommand();
+        integrity.CommandText = "PRAGMA integrity_check";
+        if ((string?)await integrity.ExecuteScalarAsync() != "ok")
+            throw new InvalidOperationException($"SQLite integrity check failed for {backend}.");
+    }
+
+    await File.WriteAllTextAsync(Path.Combine(destination, "consolidation-report.json"),
+        JsonSerializer.Serialize(new { completedAtUtc = DateTime.UtcNow, verified = true, databases = report }, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine($"Verified consolidated databases and written report to {destination}.");
+}

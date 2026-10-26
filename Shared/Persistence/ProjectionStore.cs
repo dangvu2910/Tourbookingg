@@ -37,7 +37,8 @@ public static class ProjectionStore
         {
             var entity = db.Model.GetEntityTypes().Single(e => e.GetTableName() == snapshot.Table);
             var owner = ServiceData.Owner(snapshot.Table);
-            if (owner == "" || owner == db.EventSource) throw new InvalidOperationException("Cannot replace an owned table through projections.");
+            if (owner == "" || ServiceData.OwnedServices(db.EventSource).Contains(owner))
+                throw new InvalidOperationException("Cannot replace an owned table through projections.");
             await WriteTableAsync(db, entity, snapshot, ct);
         }
         await tx.CommitAsync(ct);
