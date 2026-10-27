@@ -89,7 +89,7 @@ services:
       args: { SERVICE: BookingPlatform, SERVICE_DIR: booking }
     environment:
       <<: *app-env
-      Database__Name: booking-platform
+      Database__Name: booking
     depends_on:
       identity: { condition: service_healthy }
 
@@ -104,7 +104,7 @@ services:
       - tour-images:/app/wwwroot/images
     environment:
       <<: *app-env
-      Database__Name: customer-experience
+      Database__Name: customer
     depends_on:
       identity: { condition: service_healthy }
 

@@ -1,39 +1,36 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#17251f">
-    <title>Voyager - Khám phá hành trình của bạn</title>
-    <link rel="stylesheet" href="/css/home.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b2552"><title>Voyager - Khám phá hành trình của bạn</title>
+<link rel="stylesheet" href="/css/home.css"><script src="/js/home.js" defer></script>
 </head>
 <body>
-    <header class="site-header">
-        <a class="brand" href="/">Voyager</a>
-        <nav aria-label="Điều hướng chính">
-            <a href="/">Trang chủ</a>
-            <a href="/Tours">Tour</a>
-            <a href="/Home/Contact">Liên hệ</a>
-        </nav>
-        <a class="login-link" href="/Account/Login">Đăng nhập</a>
-    </header>
-    <main>
-        <section class="hero">
-            <p class="eyebrow">Mỗi hành trình, một câu chuyện</p>
-            <h1>Đi để thấy thế giới rộng hơn.</h1>
-            <p class="intro">Tìm cảm hứng cho chuyến đi tiếp theo và khám phá những điểm đến đáng nhớ cùng Voyager.</p>
-            <a class="primary-link" href="/Tours">Khám phá các tour</a>
-        </section>
-        <section class="welcome">
-            <p class="eyebrow">Bắt đầu hành trình</p>
-            <h2>Chuyến đi tiếp theo của bạn bắt đầu từ đây.</h2>
-            <p>Xem các hành trình đang mở bán hoặc đăng nhập để quản lý đặt chỗ và tài khoản của bạn.</p>
-            <div class="actions">
-                <a class="primary-link" href="/Tours">Xem danh sách tour</a>
-                <a class="secondary-link" href="/Account/Login">Đăng nhập tài khoản</a>
-            </div>
-        </section>
-    </main>
-    <footer>Voyager · Khám phá theo cách của bạn</footer>
-</body>
-</html>
+<div class="site-contact-strip"><div class="site-contact-content"><div><span aria-hidden="true">📍</span> Trụ sở &amp; điểm tập trung: Số nhà 4, Tổ 12, Yên Nghĩa, Hà Đông, Hà Nội</div><a href="tel:0123123"><span aria-hidden="true">☎</span> Hotline: 0123123</a></div></div>
+<div class="header-bar"><header class="site-header">
+<a class="brand" href="/">Voyager</a>
+<button class="menu-toggle" type="button" aria-expanded="false" aria-controls="home-navigation" aria-label="Mở điều hướng">☰</button>
+<div id="home-navigation" class="header-navigation"><nav aria-label="Điều hướng chính"><a class="active" href="/" aria-current="page">Trang chủ</a><a href="/Tours">Tour</a><a href="/Account/Bookings">Tour của tôi</a><a id="admin-nav-link" href="/Admin/Dashboard" hidden>Quản trị</a><a id="reviews-nav-link" href="/Account/Reviews" hidden>Đánh giá</a></nav>
+<div class="header-account"><a href="/Account/Login" id="account-link">Đăng nhập</a><a class="header-cta" href="/Account/Register" id="register-link">Đăng ký</a></div>
+</div><a class="header-contact" href="/Home/Contact">Liên hệ tư vấn</a>
+</header></div>
+<main class="home-page">
+<section class="hero-slider" aria-label="Tour nổi bật">
+<div class="hero-slider-track" id="hero-track">
+<article class="hero-slide is-active" style="background-image:url('/images/615d428f-d575-4362-9f21-fd32c6e44e88_phuquoc.webp')">
+<div class="hero-overlay"></div><div class="home-container hero-content">
+<span class="hero-tag">Mỗi hành trình, một câu chuyện</span><h1>Đi để thấy thế giới rộng hơn.</h1>
+<p class="hero-desc">Biển xanh, núi biếc và những miền đất mới. Chọn hành trình tiếp theo, để Voyager đồng hành cùng bạn.</p>
+<div class="hero-actions"><a class="btn-hero primary" href="/Tours">Khám phá các tour →</a><a class="btn-hero dark" href="/Home/Contact">Liên hệ tư vấn</a></div>
+</div></article></div>
+<button class="hero-nav is-prev" type="button" aria-label="Tour trước">‹</button><button class="hero-nav is-next" type="button" aria-label="Tour tiếp theo">›</button>
+<div class="hero-dots" aria-label="Chọn tour nổi bật"></div>
+<div class="hero-search"><form class="search-bar" action="/Tours" method="get"><label class="visually-hidden" for="tour-query">Tìm kiếm tour, địa điểm</label><input id="tour-query" type="search" name="query" placeholder="Bạn muốn đi đâu? Tìm tour, địa điểm..."><button type="submit">Tìm kiếm →</button></form></div>
+</section>
+<div class="home-container travel-benefits"><div><strong>Hành trình đa dạng</strong><span>Từ biển đảo đến núi rừng</span></div><div><strong>Đặt tour thuận tiện</strong><span>Thông tin rõ ràng, dễ lựa chọn</span></div><div><strong>Đồng hành cùng bạn</strong><span>Tư vấn cho từng chuyến đi</span></div></div>
+<section class="deal-section"><div class="home-container"><div class="section-header"><div><p class="label">GỢI Ý CHO BẠN</p><h2>Khám phá hành trình hôm nay</h2></div><a href="/Tours" class="view-all-link">Tất cả tour →</a></div><p id="tour-status" role="status">Đang tải những hành trình dành cho bạn...</p><div class="deal-grid" id="today-tours"></div></div></section>
+<section class="deal-section alt" id="monthly-section" hidden><div class="home-container"><div class="section-header"><div><p class="label">CẢM HỨNG DU LỊCH</p><h2>Chọn chuyến đi tiếp theo</h2></div><a class="view-all-link" href="/Tours">Khám phá thêm →</a></div><div class="deal-grid" id="monthly-tours"></div></div></section>
+<section class="promo-section"><div class="home-container promo-grid"><article class="promo-card" style="background-image:url('/images/49f1bae9-5626-4873-b228-067f6d54a252_sapa.png')"><div class="promo-overlay"></div><div class="promo-content"><h3>Chạm vào vẻ đẹp núi rừng</h3><p>Rời phố thị, tìm cảm hứng giữa thiên nhiên.</p><a class="btn-hero ghost" href="/Tours?query=Sa%20Pa">Khám phá Sa Pa →</a></div></article><article class="promo-card" style="background-image:url('/images/839e713c-76f9-40d3-9764-758b56220ae0_hoian.webp')"><div class="promo-overlay"></div><div class="promo-content"><h3>Mỗi chuyến đi, một kỷ niệm</h3><p>Xem lại hành trình đã đặt và những nơi đã đi qua.</p><a class="btn-hero ghost" href="/Account/Bookings">Tour của tôi →</a></div></article></div></section>
+</main>
+<footer class="site-footer"><div class="home-container footer-grid"><div><h2>Voyager</h2><p>Những miền đất mới, những trải nghiệm đáng nhớ.<br>Khám phá theo cách của bạn.</p></div><div><h3>Khám phá</h3><a href="/Tours">Danh sách tour</a><a href="/Account/Bookings">Tour của tôi</a></div><div><h3>Đồng hành</h3><a href="/Home/Contact">Liên hệ tư vấn</a><a href="tel:0123123">Hotline: 0123123</a></div></div><p class="copyright">© 2026 Voyager · Mỗi hành trình, một câu chuyện</p></footer>
+</body></html>

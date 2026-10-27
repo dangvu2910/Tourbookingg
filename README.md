@@ -47,8 +47,8 @@ Gateway và các backend còn lại vẫn chạy, nhưng những chức năng c�
 | Gateway | Cổng web công khai, trang chủ độc lập, phục vụ ảnh dùng chung và định tuyến request | Không có |
 | Identity | Tài khoản và xác thực | `services/Identity/data/identity.db` |
 | Catalog | Tour | `services/Catalog/data/catalog.db` |
-| Booking | Booking, Payment và Reporting | `services/booking/data/booking-platform.db` |
-| Customer | Review và Support | `services/customer/data/customer-experience.db` |
+| Booking | Booking, Payment và Reporting | `services/booking/data/booking.db` |
+| Customer | Review và Support | `services/customer/data/customer.db` |
 | Notification | Thông báo | `services/Notification/data/notification.db` |
 | RabbitMQ | Chuyển sự kiện giữa các service | Docker volume `rabbit-data` |
 

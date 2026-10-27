@@ -189,22 +189,24 @@
                                     ? "Đã hủy"
                                     : "Chờ xác nhận";
                             var paymentStatus = booking.PaymentStatus ?? string.Empty;
-                            var paymentStatusClass = paymentStatus == "Paid"
-                                ? "confirmed"
-                                : paymentStatus == "Processing"
-                                    ? "processing"
-                                    : paymentStatus == "Cancelled"
-                                        ? "cancelled"
-                                        : "pending";
-                            var paymentStatusLabel = paymentStatus == "Paid"
-                                ? "Đã thanh toán"
-                                : paymentStatus == "Processing"
-                                    ? "Khách báo đã chuyển khoản"
-                                    : paymentStatus == "Cancelled"
-                                        ? "Đã hủy thanh toán"
-                                        : string.IsNullOrEmpty(paymentStatus)
-                                            ? "Chưa có thanh toán"
-                                            : "Chưa thanh toán";
+                            var paymentStatusClass = paymentStatus switch
+                            {
+                                "Paid" or "Refunded" => "confirmed",
+                                "Processing" => "processing",
+                                "Cancelled" => "cancelled",
+                                _ => "pending"
+                            };
+                            var paymentStatusLabel = paymentStatus switch
+                            {
+                                "Paid" => "Đã thanh toán",
+                                "Processing" => "Khách báo đã chuyển khoản",
+                                "RefundPending" => "Đã thanh toán · Chờ hoàn tiền",
+                                "Refunded" => "Đã hoàn tiền",
+                                "Cancelled" => "Đã hủy thanh toán",
+                                "Pending" => "Chưa thanh toán",
+                                "" => "Chưa có thanh toán",
+                                _ => "Cần kiểm tra thanh toán"
+                            };
                             var canConfirmPayment = bookingStatus != "Confirmed"
                                 && bookingStatus != "Cancelled"
                                 && (paymentStatus is "Processing" or "Paid");

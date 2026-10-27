@@ -304,3 +304,8 @@
         grid-template-columns: 1fr;
     }
 }
+
+.table-wrap { overflow-x: auto; max-width: 100%; }
+.admin-table { min-width: 1000px; }
+.user-avatar { flex-shrink: 0; }
+.payment-transaction { white-space: normal; overflow-wrap: anywhere; }

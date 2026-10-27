@@ -913,3 +913,24 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* Keep grid content inside the viewport; wide tables scroll within their panel. */
+.admin-shell { width: 100%; grid-template-columns: 280px minmax(0, 1fr); }
+.admin-main, .admin-content, .admin-content > *, .panel-card, .dashboard-grid > * { min-width: 0; max-width: 100%; }
+.admin-header, .admin-actions, .panel-header, .hero-actions, .admin-form-actions { flex-wrap: wrap; }
+.dashboard-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
+.admin-table { min-width: 760px; }
+.user-meta, .tour-cell > div { min-width: 0; overflow-wrap: anywhere; }
+.admin-form input, .admin-form select, .admin-form textarea, .search-wrap { min-width: 0; max-width: 100%; }
+.stat-card { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 1100px) {
+    .admin-shell, .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+    .admin-sidebar { position: static; height: auto; }
+    .admin-nav { display: flex; flex-wrap: wrap; }
+}
+@media (max-width: 720px) {
+    .admin-header, .admin-content { padding-left: 16px; padding-right: 16px; }
+    .panel-card { padding: 16px; }
+    .bookings-hero, .dashboard-hero { flex-wrap: wrap; padding: 18px; }
+}

@@ -2,13 +2,13 @@ param([Parameter(Mandatory=$true)][DateTime]$SinceUtc, [Parameter(Mandatory=$tru
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $backend = switch ($Service) {
-    { $_ -in 'payment','reporting' } { 'booking-platform'; break }
-    { $_ -in 'review','support' } { 'customer-experience'; break }
+    { $_ -in 'payment','reporting' } { 'booking'; break }
+    { $_ -in 'review','support' } { 'customer'; break }
     default { $Service }
 }
 $serviceFolder = switch ($backend) {
-    'booking-platform' { 'booking' }
-    'customer-experience' { 'customer' }
+    'booking' { 'booking' }
+    'customer' { 'customer' }
     default { [cultureinfo]::InvariantCulture.TextInfo.ToTitleCase($backend) }
 }
 $databasePath = Join-Path $projectRoot "services/$serviceFolder/data/$backend.db"

@@ -13,8 +13,8 @@ try {
     $backends = @(
         @{ Name='identity'; Folder='Identity' },
         @{ Name='catalog'; Folder='Catalog' },
-        @{ Name='booking-platform'; Folder='booking' },
-        @{ Name='customer-experience'; Folder='customer' },
+        @{ Name='booking'; Folder='booking' },
+        @{ Name='customer'; Folder='customer' },
         @{ Name='notification'; Folder='Notification' }
     )
     if (-not $ExportOnly) {

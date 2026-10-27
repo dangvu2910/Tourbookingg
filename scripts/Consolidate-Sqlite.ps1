@@ -21,7 +21,7 @@ foreach ($entry in (Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Js
 
 $containerNames = @(docker ps --format '{{.Names}}')
 $activeWriters = $containerNames | Where-Object {
-    $_ -match '^tourbooking-distributed-(gateway|identity|catalog|booking|payment|review|support|reporting|notification|booking-platform|customer-experience)-1$'
+    $_ -match '^tourbooking-distributed-(gateway|identity|catalog|booking|payment|review|support|reporting|notification|booking|customer)-1$'
 }
 if ($activeWriters) {
     throw "Stop all application containers before consolidating SQLite: $($activeWriters -join ', ')"
@@ -36,14 +36,14 @@ if ($LASTEXITCODE -ne 0) { throw 'SQLite consolidation failed; original database
 $targets = @(
     @{ Name='identity'; Folder='Identity'; File='identity.db' },
     @{ Name='catalog'; Folder='Catalog'; File='catalog.db' },
-    @{ Name='booking-platform'; Folder='booking'; File='booking-platform.db' },
-    @{ Name='customer-experience'; Folder='customer'; File='customer-experience.db' },
+    @{ Name='booking'; Folder='booking'; File='booking.db' },
+    @{ Name='customer'; Folder='customer'; File='customer.db' },
     @{ Name='notification'; Folder='Notification'; File='notification.db' }
 )
 foreach ($target in $targets) {
     $source = Join-Path $staging "$($target.Name)\$($target.File)"
     if (-not (Test-Path -LiteralPath $source)) { throw "Staged database is missing: $($target.Name)" }
-    if ($Apply -and $target.Name -in @('booking-platform','customer-experience')) {
+    if ($Apply -and $target.Name -in @('booking','customer')) {
         $targetDirectory = Join-Path $projectRoot "services\$($target.Folder)\data"
         if ((Test-Path -LiteralPath $targetDirectory) -and (Get-ChildItem -LiteralPath $targetDirectory -Force | Select-Object -First 1)) {
             throw "Target data directory is not empty: services\$($target.Folder)\data"
@@ -57,10 +57,10 @@ if (-not $Apply) {
     return
 }
 
-$composeServices = @('gateway','identity','catalog','booking-platform','customer-experience','notification')
+$composeServices = @('gateway','identity','catalog','booking','customer','notification')
 & "$PSScriptRoot\Compose.ps1" stop @composeServices
 foreach ($target in $targets) {
-    if ($target.Name -notin @('booking-platform','customer-experience')) { continue }
+    if ($target.Name -notin @('booking','customer')) { continue }
     $targetDirectory = Join-Path $projectRoot "services\$($target.Folder)\data"
     New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $staging "$($target.Name)\$($target.File)") -Destination $targetDirectory

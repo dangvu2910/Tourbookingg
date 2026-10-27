@@ -14,12 +14,15 @@ foreach ($entry in $manifest) {
 $backends = @(
     @{ Name='identity'; Folder='Identity'; Database='identity' },
     @{ Name='catalog'; Folder='Catalog'; Database='catalog' },
-    @{ Name='booking-platform'; Folder='booking'; Database='booking-platform' },
-    @{ Name='customer-experience'; Folder='customer'; Database='customer-experience' },
+    @{ Name='booking'; Folder='booking'; Database='booking' },
+    @{ Name='customer'; Folder='customer'; Database='customer' },
     @{ Name='notification'; Folder='Notification'; Database='notification' }
 )
 $legacyDatabases = @('identity','catalog','booking','payment','review','support','reporting','notification')
-$grouped = Test-Path -LiteralPath (Join-Path $backupRoot 'sqlite/booking-platform/booking-platform.db')
+$oldGrouped = (Test-Path -LiteralPath (Join-Path $backupRoot 'sqlite/booking-platform/booking-platform.db')) `
+    -and (Test-Path -LiteralPath (Join-Path $backupRoot 'sqlite/customer-experience/customer-experience.db'))
+$grouped = $oldGrouped -or ((Test-Path -LiteralPath (Join-Path $backupRoot 'sqlite/booking/booking.db')) `
+    -and (Test-Path -LiteralPath (Join-Path $backupRoot 'sqlite/customer/customer.db')))
 $sourceRoot = Join-Path $backupRoot 'sqlite'
 $conversion = $null
 if (-not $grouped) {
@@ -33,7 +36,17 @@ if (-not $grouped) {
     $sourceRoot = $conversion
 }
 foreach ($backend in $backends) {
-    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "$($backend.Name)/$($backend.Database).db"))) {
+    $backend.SourceName = $backend.Name
+    $backend.SourceDatabase = $backend.Database
+    if ($oldGrouped -and $backend.Name -eq 'booking') {
+        $backend.SourceName = 'booking-platform'
+        $backend.SourceDatabase = 'booking-platform'
+    }
+    if ($oldGrouped -and $backend.Name -eq 'customer') {
+        $backend.SourceName = 'customer-experience'
+        $backend.SourceDatabase = 'customer-experience'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "$($backend.SourceName)/$($backend.SourceDatabase).db"))) {
         throw "Missing $($backend.Name) database in backup."
     }
 }
@@ -45,11 +58,20 @@ if (Test-Path -LiteralPath $stagedRestore) { throw 'Restore staging directory al
 if (Test-Path -LiteralPath $previous) { throw 'Previous-data destination already exists.' }
 New-Item -ItemType Directory -Path $stagedRestore | Out-Null
 foreach ($backend in $backends) {
-    Copy-Item -LiteralPath (Join-Path $sourceRoot $backend.Name) -Destination (Join-Path $stagedRestore $backend.Folder) -Recurse
+    $stagedFolder = Join-Path $stagedRestore $backend.Folder
+    Copy-Item -LiteralPath (Join-Path $sourceRoot $backend.SourceName) -Destination $stagedFolder -Recurse
+    if ($backend.SourceDatabase -ne $backend.Database) {
+        foreach ($suffix in @('.db','.db-wal','.db-shm')) {
+            $oldFile = Join-Path $stagedFolder ($backend.SourceDatabase + $suffix)
+            if (Test-Path -LiteralPath $oldFile) {
+                Rename-Item -LiteralPath $oldFile -NewName ($backend.Database + $suffix)
+            }
+        }
+    }
 }
 New-Item -ItemType Directory -Path $previous | Out-Null
 
-$composeServices = @('gateway','identity','catalog','booking-platform','customer-experience','notification')
+$composeServices = @('gateway','identity','catalog','booking','customer','notification')
 $installed = @()
 & "$PSScriptRoot\Compose.ps1" stop @composeServices
 try {

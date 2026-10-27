@@ -43,6 +43,9 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark nav-link-pill @(currentController == "Tours" ? "is-active" : "")" href="/Tours">Tour</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark nav-link-pill @(currentController == "Account" && currentAction == "Bookings" ? "is-active" : "")" href="/Account/Bookings">Tour của tôi</a>
+                        </li>
                         @if (User?.Identity?.IsAuthenticated == true && User.IsInRole("Admin"))
                         {
                             <li class="nav-item">
@@ -75,7 +78,7 @@
                                         <li>
                                             <a class="dropdown-item" asp-controller="Account" asp-action="Profile">Hồ sơ</a>
                                         </li>
-                                        <li><a class="dropdown-item" asp-controller="Account" asp-action="Bookings">Đặt tour của tôi</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Account" asp-action="Bookings">Tour của tôi</a></li>
                                         <li><a class="dropdown-item" asp-controller="Notifications" asp-action="Index">Thông báo</a></li>
                                         <li>
                                             <a class="dropdown-item" asp-controller="Account" asp-action="Reviews">Đánh giá của tôi</a>

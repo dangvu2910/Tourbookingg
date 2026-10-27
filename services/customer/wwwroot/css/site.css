@@ -222,3 +222,16 @@ body {
   color: #475569;
   font-size: 13px;
 }
+/* Allow nested grids and long account content to shrink to the available width. */
+.profile-shell { grid-template-columns: 260px minmax(0, 1fr); }
+.profile-main, .profile-card, .booking-list, .booking-info, .booking-price { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.booking-item { grid-template-columns: 140px minmax(0, 1fr) minmax(0, 280px); min-width: 0; }
+.bookings-header { flex-wrap: wrap; }
+.booking-price .btn { white-space: normal; max-width: 100%; }
+@media (max-width: 992px) {
+    .profile-shell, .booking-item { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 576px) {
+    .profile-shell { width: calc(100% - 24px); }
+    .profile-card { padding: 16px; }
+}

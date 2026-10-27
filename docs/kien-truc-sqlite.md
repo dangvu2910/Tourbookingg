@@ -75,6 +75,6 @@ Dừng toàn bộ backend trước khi sao chép các thư mục `services/<Back
 
 Database SQL Server gốc và image phiên bản cũ là đường quay lại dữ liệu trước chuyển đổi. Dữ liệu phát sinh sau khi chạy SQLite không tự đồng bộ ngược sang SQL Server. `compose.sqlserver.yaml` chỉ lưu cấu hình nguồn; không build code SQLite hiện tại rồi coi đó là bản ứng dụng SQL Server.
 
-Database hiện nằm tại `services/<Backend>/data/<backend>.db`, ví dụ `services/booking/data/booking-platform.db`. Các thư mục dữ liệu bị loại khỏi Git và Docker build context. Báo cáo migration cũ vẫn giữ tại `data/sqlite/migration-report.json`.
+Database hiện nằm tại `services/<Backend>/data/<backend>.db`, ví dụ `services/booking/data/booking.db`. Các thư mục dữ liệu bị loại khỏi Git và Docker build context. Báo cáo migration cũ vẫn giữ tại `data/sqlite/migration-report.json`.
 
 Migration mặc định chuyển dữ liệu đã kiểm chứng vào 5 backend. Dùng `-ExportOnly -Destination data/sqlite-trial-2` nếu chỉ muốn xuất một bản thử riêng, không cài vào service. Backup gom 5 database backend vào cấu trúc `sqlite/<backend>`; Restore cũng chuyển đổi được backup 8 database đời cũ.

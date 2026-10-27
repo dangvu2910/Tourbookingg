@@ -1,7 +1,7 @@
 @model Tourbooking.ViewModels.AccountBookingsViewModel
 
 @{
-    ViewData["Title"] = "Quản lý đặt chỗ";
+    ViewData["Title"] = "Tour của tôi";
     var vnd = CultureInfo.GetCultureInfo("vi-VN");
 }
 
@@ -17,7 +17,7 @@
             <nav class="profile-nav">
                 <a class="profile-link" asp-action="Profile">Thông tin cá nhân</a>
                 <a class="profile-link" asp-action="ChangePassword">Đổi mật khẩu</a>
-                <a class="profile-link active" asp-action="Bookings">Quản lý đặt chỗ</a>
+                <a class="profile-link active" asp-action="Bookings">Tour của tôi</a>
                 <a class="profile-link" asp-action="Reviews">Đánh giá của tôi</a>
                 <button class="profile-link" type="button">Thông báo</button>
                 <button class="profile-link" type="button">Thanh toán</button>
@@ -33,8 +33,8 @@
             <div class="profile-card">
                 <div class="bookings-header">
                     <div>
-                        <h3>Quản lý đặt chỗ</h3>
-                        <p>Kiểm tra các tour bạn đã đặt và trạng thái hiện tại.</p>
+                        <h3>Tour của tôi</h3>
+                        <p>Theo dõi các tour đã đặt, đã đi và đã hủy của bạn.</p>
                         @if (TempData["BookingSuccess"] is string bookingSuccess)
                         {
                             <p class="text-success mt-2">@bookingSuccess</p>
@@ -46,8 +46,8 @@
                     </div>
                     <div class="bookings-tabs">
                         <a class="bookings-tab @(Model.CurrentTab == "all" ? "active" : "")" asp-action="Bookings" asp-route-tab="all">Tất cả (@Model.TotalBookings)</a>
-                        <a class="bookings-tab @(Model.CurrentTab == "upcoming" ? "active" : "")" asp-action="Bookings" asp-route-tab="upcoming">Sắp tới (@Model.UpcomingBookings)</a>
-                        <a class="bookings-tab @(Model.CurrentTab == "completed" ? "active" : "")" asp-action="Bookings" asp-route-tab="completed">Đã hoàn thành (@Model.CompletedBookings)</a>
+                        <a class="bookings-tab @(Model.CurrentTab == "upcoming" ? "active" : "")" asp-action="Bookings" asp-route-tab="upcoming">Đã đặt (@Model.UpcomingBookings)</a>
+                        <a class="bookings-tab @(Model.CurrentTab == "completed" ? "active" : "")" asp-action="Bookings" asp-route-tab="completed">Đã đi (@Model.CompletedBookings)</a>
                         <a class="bookings-tab @(Model.CurrentTab == "cancelled" ? "active" : "")" asp-action="Bookings" asp-route-tab="cancelled">Đã hủy (@Model.CancelledBookings)</a>
                     </div>
                 </div>
@@ -59,12 +59,15 @@
                         {
                             var statusClass = booking.Status switch
                             {
+                                "Completed" => "confirmed",
                                 "Confirmed" => "confirmed",
                                 "Cancelled" => "cancelled",
                                 _ => "pending"
                             };
                             var statusLabel = booking.Status switch
                             {
+                                "Completed" => "Đã đi",
+                                "Processing" => "Chờ xác nhận thanh toán",
                                 "Confirmed" => "Đã xác nhận",
                                 "Cancelled" => "Đã hủy",
                                 _ => "Chờ xác nhận"
@@ -96,18 +99,26 @@
                                     <span>Tổng thanh toán</span>
                                     <strong>@booking.TotalPrice.ToString("C0", vnd)</strong>
                                     <span class="status-pill @statusClass">@statusLabel</span>
-                                    @if (string.Equals(booking.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        <span class="status-pill confirmed">Đã thanh toán</span>
+                                    @{
+                                        var paymentLabel = booking.PaymentStatus switch
+                                        {
+                                            "Paid" => "Đã thanh toán",
+                                            "Processing" => "Đang chờ xác nhận thanh toán",
+                                            "RefundPending" => "Đã thanh toán · Chờ hoàn tiền",
+                                            "Refunded" => "Đã hoàn tiền",
+                                            "Cancelled" => "Đã hủy thanh toán",
+                                            "Pending" => "Chưa thanh toán",
+                                            null or "" => "Chưa có thanh toán",
+                                            _ => "Cần kiểm tra thanh toán"
+                                        };
+                                        var paymentClass = booking.PaymentStatus switch
+                                        {
+                                            "Paid" or "Refunded" => "confirmed",
+                                            "Cancelled" => "cancelled",
+                                            _ => "pending"
+                                        };
                                     }
-                                    else if (!string.IsNullOrWhiteSpace(booking.PaymentStatus))
-                                    {
-                                        <span class="status-pill pending">
-                                            @(string.Equals(booking.PaymentStatus, "Processing", StringComparison.OrdinalIgnoreCase)
-                                                ? "Đang chờ xác nhận thanh toán"
-                                                : "Chưa thanh toán")
-                                        </span>
-                                    }
+                                    <span class="status-pill @paymentClass">@paymentLabel</span>
                                     @if (string.Equals(booking.Status, "Confirmed", StringComparison.OrdinalIgnoreCase)
                                         && string.Equals(booking.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
                                     {
