@@ -34,6 +34,16 @@
                 <span asp-validation-for="Price" class="text-danger"></span>
             </label>
             <label>
+                <span>Giờ khởi hành</span>
+                <input asp-for="DepartureTime" type="time" />
+                <span asp-validation-for="DepartureTime" class="text-danger"></span>
+            </label>
+            <label>
+                <span>Giờ về dự kiến</span>
+                <input asp-for="ReturnTime" type="time" />
+                <span asp-validation-for="ReturnTime" class="text-danger"></span>
+            </label>
+            <label>
                 <span>Danh mục</span>
                 <input asp-for="CategoryId" type="text" />
                 <span asp-validation-for="CategoryId" class="text-danger"></span>

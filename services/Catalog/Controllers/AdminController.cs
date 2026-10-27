@@ -168,6 +168,8 @@ public class AdminController : Controller
                 Location = t.Location,
                 ImageUrl = NormalizeImageUrl(t.ImageUrl) ?? string.Empty,
                 Price = t.Price.ToString("C0", VnCulture),
+                DepartureTime = t.DepartureTime,
+                ReturnTime = t.ReturnTime,
                 Status = "Published"
             }).ToList()
         };

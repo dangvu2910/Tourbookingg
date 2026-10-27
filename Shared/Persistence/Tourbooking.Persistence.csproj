@@ -7,10 +7,10 @@
     <ProjectReference Include="../Routing/Tourbooking.Routing.csproj" />
     <ProjectReference Include="../../services/Identity/Models/Identity.Models.csproj" />
     <ProjectReference Include="../../services/Catalog/Models/Catalog.Models.csproj" />
-    <ProjectReference Include="../../services/BookingPlatform/Modules/Booking/Models/Booking.Models.csproj" />
-    <ProjectReference Include="../../services/BookingPlatform/Modules/Payment/Models/Payment.Models.csproj" />
-    <ProjectReference Include="../../services/CustomerExperience/Modules/Review/Models/Review.Models.csproj" />
-    <ProjectReference Include="../../services/CustomerExperience/Modules/Support/Models/Support.Models.csproj" />
+    <ProjectReference Include="../../services/booking/Modules/Booking/Models/Booking.Models.csproj" />
+    <ProjectReference Include="../../services/booking/Modules/Payment/Models/Payment.Models.csproj" />
+    <ProjectReference Include="../../services/customer/Modules/Review/Models/Review.Models.csproj" />
+    <ProjectReference Include="../../services/customer/Modules/Support/Models/Support.Models.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.6" />

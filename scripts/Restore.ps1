@@ -14,8 +14,8 @@ foreach ($entry in $manifest) {
 $backends = @(
     @{ Name='identity'; Folder='Identity'; Database='identity' },
     @{ Name='catalog'; Folder='Catalog'; Database='catalog' },
-    @{ Name='booking-platform'; Folder='BookingPlatform'; Database='booking-platform' },
-    @{ Name='customer-experience'; Folder='CustomerExperience'; Database='customer-experience' },
+    @{ Name='booking-platform'; Folder='booking'; Database='booking-platform' },
+    @{ Name='customer-experience'; Folder='customer'; Database='customer-experience' },
     @{ Name='notification'; Folder='Notification'; Database='notification' }
 )
 $legacyDatabases = @('identity','catalog','booking','payment','review','support','reporting','notification')

@@ -44,7 +44,7 @@ Lệnh đã chạy thành công:
 
 ## Xác minh sau khi gom backend — 26/10/2026
 
-- 5 backend vật lý (Identity, Catalog, Booking Platform, Customer Experience, Notification), Gateway và RabbitMQ đều healthy.
+- 5 backend vật lý (Identity, Catalog, Booking, Customer, Notification), Gateway và RabbitMQ đều healthy trong lần kiểm thử được ghi nhận.
 - `dotnet build Tourbooking.sln -m:1`: thành công, 0 lỗi và 0 cảnh báo.
 - Kiểm thử ranh giới, URL và SQLite: 31/31 đạt.
 - `docker-compose config -q`: thành công.

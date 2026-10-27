@@ -20,5 +20,7 @@ public class AdminTourRow
     public string Location { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
     public string Price { get; set; } = string.Empty;
+    public TimeOnly DepartureTime { get; set; }
+    public TimeOnly ReturnTime { get; set; }
     public string Status { get; set; } = string.Empty;
 }

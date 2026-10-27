@@ -7,4 +7,3 @@ public sealed class InboxMessage
 }
 
 public sealed record BookingEventData(int BookingId, string UserId, decimal TotalPrice, string Status);
-public sealed record PaymentEventData(int BookingId);

@@ -1,0 +1,124 @@
+@model Tourbooking.ViewModels.PaymentPageViewModel
+
+@{
+    ViewData["Title"] = "Thanh toán";
+    var vnd = CultureInfo.GetCultureInfo("vi-VN");
+}
+
+<link rel="stylesheet" href="/assets/booking/css/booking.css" />
+
+<div class="booking-page">
+    <section class="booking-hero">
+        <div class="booking-hero-label">THANH TOÁN</div>
+        @if (string.Equals(Model.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+        {
+            <h1>Thanh toán đã được xác nhận</h1>
+            <p>Booking #@Model.BookingId đã thanh toán thành công.</p>
+        }
+        else if (string.Equals(Model.PaymentStatus, "Processing", StringComparison.OrdinalIgnoreCase))
+        {
+            <h1>Đang chờ xác nhận thanh toán</h1>
+            <p>Yêu cầu xác nhận chuyển khoản của booking #@Model.BookingId đã được gửi. Bạn vẫn có thể xem lại thông tin chuyển khoản bên dưới.</p>
+        }
+        else
+        {
+            <h1>Quét QR để thanh toán</h1>
+            <p>Booking của bạn đã được tạo. Vui lòng thanh toán để admin xác nhận nhanh hơn.</p>
+        }
+        @if (TempData["PaymentMessage"] is string paymentMessage)
+        {
+            <p class="text-success" style="margin-top: 10px;">@paymentMessage</p>
+        }
+        @if (TempData["PaymentError"] is string paymentError)
+        {
+            <p class="text-danger" style="margin-top: 10px;">@paymentError</p>
+        }
+    </section>
+
+    <section class="booking-grid">
+        <div class="booking-left">
+            <div class="booking-card">
+                <div class="card-title">
+                    <span class="card-icon">◎</span>
+                    <div>
+                        <h2>Thông tin thanh toán</h2>
+                        <p>Mã booking: VOY-@Model.BookingId</p>
+                    </div>
+                </div>
+
+                <div class="payment-card" style="margin-top: 18px;">
+                    <h3>Số tiền</h3>
+                    <p style="margin: 6px 0 0; font-weight: 700; font-size: 20px;">@Model.Amount.ToString("C0", vnd)</p>
+
+                    @if (!string.Equals(Model.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="payment-details is-active" style="margin-top: 16px;">
+                            <div class="payment-detail-title">QR chuyển khoản</div>
+                            <div class="bank-qr">
+                                <div class="bank-qr-header">
+                                    <span>Quét QR @Model.BankCode</span>
+                                    <span class="bank-qr-amount">@Model.Amount.ToString("C0", vnd)</span>
+                                </div>
+                                <img src="@Model.QrImageUrl" alt="QR thanh toán" />
+                                <p class="bank-qr-note">Nội dung: @Model.AddInfo</p>
+                                <p class="bank-qr-note">Tài khoản nhận: @Model.AccountNumber (@Model.AccountName)</p>
+                            </div>
+
+                            <p class="payment-note">Sau khi thanh toán, booking sẽ ở trạng thái chờ xác nhận.</p>
+                        </div>
+
+                        @if (!string.Equals(Model.PaymentStatus, "Processing", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="payment-details" style="margin-top: 16px;">
+                                <div class="payment-detail-title">Xác nhận thanh toán</div>
+                                <p class="payment-note">Sau khi bạn chuyển khoản xong, hãy bấm xác nhận để admin kiểm tra nhanh hơn.</p>
+
+                                <form asp-action="ConfirmPayment" method="post" class="payment-grid-single" style="display:grid; gap:10px;">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="bookingId" value="@Model.BookingId" />
+                                    <div class="form-grid" style="grid-template-columns: 1fr;">
+                                        <label>
+                                            <span>Mã giao dịch (tuỳ chọn)</span>
+                                            <input name="transactionCode" type="text" maxlength="80" placeholder="Nhập mã giao dịch nếu có" />
+                                        </label>
+                                    </div>
+                                    <button type="submit" class="confirm-button">Xác nhận thanh toán</button>
+                                </form>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <aside class="booking-right">
+            <div class="summary-card">
+                <div class="summary-body">
+                    <div class="summary-title">
+                        <div>
+                            <h3>@Model.TourName</h3>
+                            <p>📍 @Model.TourLocation</p>
+                        </div>
+                        <span class="summary-rating">VOY-@Model.BookingId</span>
+                    </div>
+
+                    <div class="summary-line">
+                        <span>Ngày đi</span>
+                        <strong>@Model.TravelDate.ToString("dd/MM/yyyy")</strong>
+                    </div>
+                    <div class="summary-line">
+                        <span>Số khách</span>
+                        <strong>@Model.GuestCount</strong>
+                    </div>
+
+                    <div class="summary-total">
+                        <span>Tổng thanh toán</span>
+                        <strong>@Model.Amount.ToString("C0", vnd)</strong>
+                    </div>
+
+                    <a class="confirm-button" asp-controller="Account" asp-action="Bookings">Xem booking của tôi</a>
+                </div>
+            </div>
+        </aside>
+    </section>
+</div>

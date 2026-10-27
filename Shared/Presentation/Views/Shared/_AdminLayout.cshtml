@@ -11,8 +11,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@pageTitle - Quản trị Voyager</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap" />
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="~/css/admin-dashboard.css" asp-append-version="true" />
+    <link rel="stylesheet" href="@ServiceAssetPath.For(AppConfiguration, "~/lib/bootstrap/dist/css/bootstrap.min.css")" />
+    <link rel="stylesheet" href="@ServiceAssetPath.For(AppConfiguration, "~/css/admin-dashboard.css")" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
@@ -60,7 +60,7 @@
         </div>
     </div>
 
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="@ServiceAssetPath.For(AppConfiguration, "~/lib/jquery/dist/jquery.min.js")"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

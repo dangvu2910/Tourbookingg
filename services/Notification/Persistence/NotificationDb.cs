@@ -19,7 +19,7 @@ public sealed class NotificationDb(DbContextOptions<NotificationDb> options) : D
         {
             EventId = evt.EventId, Type = evt.Type, ResourceId = evt.ResourceId,
             UserId = evt.UserId, Email = evt.Email, CorrelationId = evt.CorrelationId,
-            Message = $"{evt.Type}: #{evt.ResourceId} — {evt.Status}", CreatedAt = evt.OccurredAt
+            Message = FormatMessage(evt), CreatedAt = evt.OccurredAt
         });
         try { await SaveChangesAsync(ct); return true; }
         catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 })
@@ -29,5 +29,15 @@ public sealed class NotificationDb(DbContextOptions<NotificationDb> options) : D
             return false;
         }
     }
-}
 
+    private static string FormatMessage(IntegrationEvent evt) => (evt.Type, evt.Status) switch
+    {
+        ("booking.created", _) => $"Đã nhận đặt tour #{evt.ResourceId}. Đơn đang chờ admin xác nhận.",
+        ("booking.updated", "Confirmed") => $"Đặt tour #{evt.ResourceId} đã được xác nhận.",
+        ("booking.updated", "Cancelled") => $"Đặt tour #{evt.ResourceId} đã bị hủy.",
+        ("booking.updated", "Processing") => $"Đã ghi nhận thông tin thanh toán cho đặt tour #{evt.ResourceId}; đang chờ xác nhận.",
+        ("contact.created", _) => $"Đã nhận yêu cầu hỗ trợ #{evt.ResourceId}.",
+        ("contact.reply.created", _) => $"Admin đã phản hồi yêu cầu hỗ trợ #{evt.ResourceId}.",
+        _ => $"{evt.Type}: #{evt.ResourceId} — {evt.Status}"
+    };
+}

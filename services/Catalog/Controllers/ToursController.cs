@@ -222,7 +222,7 @@ public class ToursController : Controller
         [Authorize(Roles = "Admin")]
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("TourId,Name,Location,Price,Description,CategoryId")] Tour tour, IFormFile? imageFile)
+        public async Task<IActionResult> Create([Bind("TourId,Name,Location,Price,DepartureTime,ReturnTime,Description,CategoryId")] Tour tour, IFormFile? imageFile)
         {
             TryNormalizePriceFromRequest(tour);
 
@@ -285,7 +285,7 @@ public class ToursController : Controller
         [Authorize(Roles = "Admin")]
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("TourId,Name,Location,Price,Description,CategoryId")] Tour tour, IFormFile? imageFile)
+        public async Task<IActionResult> Edit(int id, [Bind("TourId,Name,Location,Price,DepartureTime,ReturnTime,Description,CategoryId")] Tour tour, IFormFile? imageFile)
         {
             TryNormalizePriceFromRequest(tour);
 
@@ -307,6 +307,8 @@ public class ToursController : Controller
                     existingTour.Name = tour.Name;
                     existingTour.Location = tour.Location;
                     existingTour.Price = tour.Price;
+                    existingTour.DepartureTime = tour.DepartureTime;
+                    existingTour.ReturnTime = tour.ReturnTime;
                     existingTour.Description = tour.Description;
                     existingTour.CategoryId = tour.CategoryId;
 

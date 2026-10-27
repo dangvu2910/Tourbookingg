@@ -72,6 +72,7 @@
                     <th>Tên tour</th>
                     <th>Địa điểm</th>
                     <th>Giá</th>
+                    <th>Giờ đi / về</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
                 </tr>
@@ -98,6 +99,10 @@
                         </td>
                         <td>@tour.Location</td>
                         <td class="table-strong">@tour.Price</td>
+                        <td>
+                            <div>Đi: @tour.DepartureTime.ToString("HH:mm")</div>
+                            <div>Về: @tour.ReturnTime.ToString("HH:mm")</div>
+                        </td>
                         <td>
                             <span class="status-pill confirmed">Đã đăng</span>
                         </td>

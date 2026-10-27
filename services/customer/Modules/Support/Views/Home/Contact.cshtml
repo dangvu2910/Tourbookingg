@@ -1,0 +1,95 @@
+@model Tourbooking.ViewModels.ContactPageViewModel
+
+@{
+    ViewData["Title"] = "Liên hệ tư vấn";
+}
+
+<link rel="stylesheet" href="/assets/customer/css/home.css" />
+
+<div class="py-4 py-md-5">
+    <div class="section-header">
+        <div>
+            <p class="label">HỖ TRỢ</p>
+            <h2>Liên hệ tư vấn</h2>
+            <p class="text-muted mb-0">Bắt đầu cuộc trò chuyện với tư vấn viên hoặc mở lại lịch sử bên dưới.</p>
+        </div>
+    </div>
+
+    @if (TempData["ContactMessage"] is string msg && !string.IsNullOrWhiteSpace(msg))
+    {
+        <div class="alert alert-success">@msg</div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            @await Html.PartialAsync("_ContactForm", Model.Form)
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                        <div>
+                            <h3 class="h5 mb-1">Cuộc trò chuyện của bạn</h3>
+                            <p class="text-muted mb-0">Chọn cuộc trò chuyện để gửi tin nhắn và xem toàn bộ lịch sử.</p>
+                        </div>
+                    </div>
+
+                    @if (Model.Tickets.Any())
+                    {
+                        <div class="vstack gap-3">
+                            @foreach (var ticket in Model.Tickets)
+                            {
+                                var statusClass = ticket.Status.Equals("Replied", StringComparison.OrdinalIgnoreCase) ? "success" : "warning";
+                                var statusText = ticket.Status.Equals("Replied", StringComparison.OrdinalIgnoreCase)
+                                    ? "Đã phản hồi"
+                                    : "Đang chờ admin";
+
+                                <div class="contact-thread">
+                                    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                                        <div>
+                                            <a asp-action="ContactDetails" asp-route-id="@ticket.ContactInquiryId"><strong>@ticket.Subject</strong></a>
+                                            <div class="small text-muted">@ticket.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
+                                        </div>
+                                        <span class="badge bg-@statusClass">@statusText</span>
+                                    </div>
+
+                                    <div class="chat-bubble chat-bubble-user">
+                                        <div class="chat-bubble-label">Bạn</div>
+                                        <div class="chat-bubble-text">@ticket.Message</div>
+                                    </div>
+
+                                    @if (!string.IsNullOrWhiteSpace(ticket.AdminReply))
+                                    {
+                                        <div class="chat-bubble chat-bubble-admin">
+                                            <div class="chat-bubble-label">Admin</div>
+                                            <div class="chat-bubble-text">@ticket.AdminReply</div>
+                                            @if (ticket.RepliedAt.HasValue)
+                                            {
+                                                <div class="chat-bubble-meta">@ticket.RepliedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="chat-bubble chat-bubble-admin is-pending">
+                                            <div class="chat-bubble-label">Admin</div>
+                                            <div class="chat-bubble-text">Admin đang xem và sẽ phản hồi sớm.</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted">Chưa có ticket nào. Nếu đã đăng nhập, các yêu cầu trước của bạn sẽ hiển thị ở đây.</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

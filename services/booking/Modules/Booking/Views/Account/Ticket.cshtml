@@ -1,0 +1,49 @@
+@model Tourbooking.ViewModels.BookingTicketViewModel
+
+@{
+    ViewData["Title"] = "Vé điện tử";
+}
+
+<link rel="stylesheet" href="/assets/booking/css/booking-ticket.css" />
+
+<main class="ticket-page">
+    <section class="ticket-sheet">
+        <div class="ticket-heading">
+            <div>
+                <span class="ticket-kicker">VOYAGER • VÉ ĐIỆN TỬ</span>
+                <h1>@Model.TourName</h1>
+                <p>Vé hợp lệ sau khi thanh toán và được admin xác nhận.</p>
+            </div>
+            <div class="ticket-code">
+                <span>MÃ VÉ</span>
+                <strong>VOY-@Model.BookingId</strong>
+            </div>
+        </div>
+
+        <div class="ticket-status">✓ ĐÃ THANH TOÁN • ĐÃ XÁC NHẬN</div>
+
+        <div class="ticket-details">
+            <div><span>Khách đi tour</span><strong>@Model.CustomerName</strong></div>
+            <div><span>Số điện thoại</span><strong>@Model.CustomerPhone</strong></div>
+            <div><span>Ngày khởi hành</span><strong>@Model.TravelDate.ToString("dd/MM/yyyy")</strong></div>
+            <div><span>Số khách</span><strong>@Model.GuestCount người</strong></div>
+            <div><span>Giờ khởi hành</span><strong>@Model.DepartureTime.ToString("HH:mm")</strong></div>
+            <div><span>Giờ về dự kiến</span><strong>@Model.ReturnTime.ToString("HH:mm")</strong></div>
+            <div class="ticket-wide"><span>Hành trình</span><strong>@Model.TourLocation</strong></div>
+            <div class="ticket-wide">
+                <span>Trụ sở / điểm tập trung đón khách</span>
+                <strong>Số nhà 4, Tổ 12, Yên Nghĩa, Hà Đông, Hà Nội</strong>
+            </div>
+        </div>
+
+        <div class="ticket-notice">
+            Vui lòng có mặt trước giờ khởi hành 15 phút và xuất trình vé này cho hướng dẫn viên.
+            Cần hỗ trợ? Gọi hotline <a href="tel:0123123">0123123</a>.
+        </div>
+
+        <div class="ticket-actions">
+            <a class="btn btn-outline-primary" asp-action="Bookings">Quay lại đặt chỗ</a>
+            <button class="btn btn-primary" type="button" onclick="window.print()">In vé</button>
+        </div>
+    </section>
+</main>

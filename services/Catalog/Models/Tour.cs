@@ -16,6 +16,12 @@ public class Tour
     [Display(Name = "Giá")]
     public decimal Price { get; set; }
 
+    [Display(Name = "Giờ khởi hành")]
+    public TimeOnly DepartureTime { get; set; } = new(8, 0);
+
+    [Display(Name = "Giờ về dự kiến")]
+    public TimeOnly ReturnTime { get; set; } = new(18, 0);
+
     [Display(Name = "Mô tả")]
     public string Description { get; set; } = string.Empty;
 

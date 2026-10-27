@@ -13,11 +13,11 @@ x-app-env: &app-env
   Service__TrustGateway: "true"
   Services__identity: http://identity:8080
   Services__catalog: http://catalog:8080
-  Services__booking: http://booking-platform:8080
-  Services__payment: http://booking-platform:8080
-  Services__review: http://customer-experience:8080
-  Services__support: http://customer-experience:8080
-  Services__reporting: http://booking-platform:8080
+  Services__booking: http://booking:8080
+  Services__payment: http://booking:8080
+  Services__review: http://customer:8080
+  Services__support: http://customer:8080
+  Services__reporting: http://booking:8080
   Services__notification: http://notification:8080
   Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
 
@@ -78,35 +78,35 @@ services:
     depends_on:
       identity: { condition: service_healthy }
 
-  booking-platform:
+  booking:
     <<: *app
     volumes:
-      - ./services/BookingPlatform/data:/data
+      - ./services/booking/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
     build:
       context: .
-      args: { SERVICE: BookingPlatform }
+      args: { SERVICE: BookingPlatform, SERVICE_DIR: booking }
     environment:
       <<: *app-env
+      Database__Name: booking-platform
     depends_on:
       identity: { condition: service_healthy }
-      rabbitmq: { condition: service_healthy }
 
-  customer-experience:
+  customer:
     <<: *app
     build:
       context: .
-      args: { SERVICE: CustomerExperience }
-    environment:
-      <<: *app-env
+      args: { SERVICE: CustomerExperience, SERVICE_DIR: customer }
     volumes:
-      - ./services/CustomerExperience/data:/data
+      - ./services/customer/data:/data
       - auth-keys:/keys
       - tour-images:/app/wwwroot/images
+    environment:
+      <<: *app-env
+      Database__Name: customer-experience
     depends_on:
       identity: { condition: service_healthy }
-      rabbitmq: { condition: service_healthy }
 
   notification:
     <<: *app
@@ -128,21 +128,17 @@ services:
       args: { SERVICE: Gateway }
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - tour-images:/app/wwwroot/images
     environment:
       Services__identity: http://identity:8080
       Services__catalog: http://catalog:8080
-      Services__booking: http://booking-platform:8080
-      Services__payment: http://booking-platform:8080
-      Services__review: http://customer-experience:8080
-      Services__support: http://customer-experience:8080
-      Services__reporting: http://booking-platform:8080
+      Services__booking: http://booking:8080
+      Services__payment: http://booking:8080
+      Services__review: http://customer:8080
+      Services__support: http://customer:8080
+      Services__reporting: http://booking:8080
       Services__notification: http://notification:8080
-    depends_on:
-      identity: { condition: service_healthy }
-      catalog: { condition: service_healthy }
-      booking-platform: { condition: service_healthy }
-      customer-experience: { condition: service_healthy }
-      notification: { condition: service_healthy }
 
   tests:
     profiles: ["test"]

@@ -4,7 +4,7 @@
 
 Bản này phục vụ chạy local, đồ án và thử nghiệm tải nhỏ. Năm backend vật lý có file SQLite và thư mục bind mount riêng. Không có backend nào mount database của backend khác. Không cần container SQL Server để chạy ứng dụng; RabbitMQ vẫn được giữ.
 
-Gateway giữ nguyên URL công khai; các logical owner được gom như sau: Booking + Payment + Reporting thành Booking Platform, Review + Support thành Customer Experience. Identity, Catalog và Notification vẫn là backend riêng. Gateway không sở hữu dữ liệu nghiệp vụ.
+Gateway giữ nguyên URL công khai; các logical owner được gom như sau: Booking + Payment + Reporting thành backend Booking, Review + Support thành backend Customer. Identity, Catalog và Notification vẫn là backend riêng. Gateway không sở hữu dữ liệu nghiệp vụ.
 
 ## Quyền sở hữu và bản sao đọc
 
@@ -21,7 +21,7 @@ Gateway giữ nguyên URL công khai; các logical owner được gom như sau: 
 | Support | Identity |
 | Reporting | Identity, Catalog, Booking, Payment, Review |
 
-Sau khi gom, Booking Platform dùng chung các bản sao cần thiết cho Booking/Payment/Reporting; Customer Experience dùng bản sao phục vụ Review/Support. Các endpoint nội bộ xuất dữ liệu theo logical owner để không làm lộ nhầm dữ liệu giữa bảng.
+Sau khi gom, Booking dùng chung các bản sao cần thiết cho Booking/Payment/Reporting; Customer dùng bản sao phục vụ Review/Support. Các endpoint nội bộ xuất dữ liệu theo logical owner để không làm lộ nhầm dữ liệu giữa bảng.
 
 Các bản sao được thay thế trong transaction qua API `/internal/data/{owner}` trước khi action chạy. API yêu cầu `X-Service-Key` từ `.env`; Gateway chặn `/internal` và bỏ header nội bộ do trình duyệt gửi. PasswordHash chỉ tồn tại trong Identity; token và đăng nhập ngoài không được sao chép sang backend khác.
 
@@ -31,17 +31,12 @@ SQLite connection tắt foreign-key enforcement trong các database có bản sa
 
 ## Booking và Payment
 
-1. Booking lưu đơn và `booking.created` vào Outbox cùng transaction.
-2. Dispatcher publish qua RabbitMQ bằng persistent message và publisher confirmation.
-3. Payment nhận sự kiện, tự tạo giao dịch trong database Payment. Inbox ghi EventId trong cùng transaction để chống xử lý trùng.
-4. Trong lúc chờ, trang thanh toán hiển thị trạng thái đang chuẩn bị và nút kiểm tra lại.
-5. Khách báo đã chuyển khoản: Payment lưu `Processing`, phát `payment.updated`; Booking nhận sự kiện và cập nhật đơn.
-6. Admin vẫn xác nhận từ màn quản lý Booking theo nghiệp vụ chuyển khoản thủ công cũ. Sự kiện Confirmed cập nhật Payment thành Paid. Notification nhận các sự kiện để tạo thông báo.
-7. Hủy booking chưa trả tiền dẫn đến Payment Cancelled; nếu đã Paid thì chuyển RefundPending, không giả định tiền đã tự hoàn.
+1. Booking và thông tin Payment được lưu đồng bộ trong cùng database và transaction; trang thanh toán có dữ liệu ngay sau khi đặt tour.
+2. Khi khách báo đã chuyển khoản, Payment chuyển sang `Processing` và Booking cũng được cập nhật sang `Processing` trong cùng request.
+3. Admin xác nhận tiền nhận được: Booking chuyển sang `Confirmed`, Payment sang `Paid`. Nếu hủy, Booking chuyển sang `Cancelled`; Payment chuyển sang `Cancelled` hoặc `RefundPending` nếu đã Paid.
+4. Thay đổi trạng thái Booking và yêu cầu hỗ trợ được ghi vào Outbox cùng transaction; RabbitMQ chuyển các sự kiện này sang Notification. Broker ngừng không chặn việc lưu booking/payment; thông báo sẽ được gửi lại khi broker hoạt động.
 
-Consumer bỏ qua sự kiện Processing nếu Booking đã Confirmed/Cancelled, và không hạ Payment Paid về Pending khi nhận lại sự kiện cũ. Mỗi consumer có durable queue, retry trễ và dead-letter queue sau 5 lần thử lại. Inbox chống trùng EventId; queue được khai báo cả từ producer để giữ message khi consumer khởi động muộn.
-
-Không có transaction SQL chung giữa Booking và Payment. Giao diện có thể thấy trạng thái cũ trong khoảng ngắn. Bản này **chưa bổ sung kho chỗ theo lịch khởi hành, thời hạn giữ chỗ hoặc cổng thu tiền tự động**; đây là phạm vi nghiệp vụ khác với chuyển database.
+Không còn consumer RabbitMQ giữa Booking và Payment. Bản này **chưa bổ sung kho chỗ theo lịch khởi hành, thời hạn giữ chỗ hoặc cổng thu tiền tự động**; đây là phạm vi nghiệp vụ khác với chuyển database.
 
 ## Support và Notification
 
@@ -80,6 +75,6 @@ Dừng toàn bộ backend trước khi sao chép các thư mục `services/<Back
 
 Database SQL Server gốc và image phiên bản cũ là đường quay lại dữ liệu trước chuyển đổi. Dữ liệu phát sinh sau khi chạy SQLite không tự đồng bộ ngược sang SQL Server. `compose.sqlserver.yaml` chỉ lưu cấu hình nguồn; không build code SQLite hiện tại rồi coi đó là bản ứng dụng SQL Server.
 
-Database hiện nằm tại `services/<Backend>/data/<backend>.db`, ví dụ `services/BookingPlatform/data/booking-platform.db`. Các thư mục dữ liệu bị loại khỏi Git và Docker build context. Báo cáo migration cũ vẫn giữ tại `data/sqlite/migration-report.json`.
+Database hiện nằm tại `services/<Backend>/data/<backend>.db`, ví dụ `services/booking/data/booking-platform.db`. Các thư mục dữ liệu bị loại khỏi Git và Docker build context. Báo cáo migration cũ vẫn giữ tại `data/sqlite/migration-report.json`.
 
 Migration mặc định chuyển dữ liệu đã kiểm chứng vào 5 backend. Dùng `-ExportOnly -Destination data/sqlite-trial-2` nếu chỉ muốn xuất một bản thử riêng, không cài vào service. Backup gom 5 database backend vào cấu trúc `sqlite/<backend>`; Restore cũng chuyển đổi được backup 8 database đời cũ.

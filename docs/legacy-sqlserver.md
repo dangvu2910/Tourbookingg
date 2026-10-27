@@ -294,7 +294,7 @@ Nên đọc theo thứ tự sau:
 | 1 | `compose.yaml` | Có những container nào, kết nối và lưu dữ liệu ra sao |
 | 2 | `services/Gateway/Program.cs` | URL được chuyển đến dịch vụ nào |
 | 3 | `Shared/Routing/ServiceBoundary.cs` | Endpoint thuộc dịch vụ nào |
-| 4 | `services/BookingPlatform/Modules/Booking/Controllers/HomeController.cs` và `services/BookingPlatform/Modules/Payment/Controllers/HomeController.cs` | Luồng đặt tour và gửi yêu cầu xác nhận thanh toán |
+| 4 | `services/booking/Modules/Booking/Controllers/HomeController.cs` và `services/booking/Modules/Payment/Controllers/HomeController.cs` | Luồng đặt tour và gửi yêu cầu xác nhận thanh toán |
 | 5 | `Shared/Persistence/Data/ApplicationDbContext.cs` | Lưu dữ liệu nghiệp vụ cùng sự kiện outbox |
 | 6 | `Shared/Persistence/OutboxDispatcher.cs` | Worker lấy sự kiện và gửi RabbitMQ |
 | 7 | `services/Notification/` | Consumer nhận sự kiện, lưu và đọc thông báo |

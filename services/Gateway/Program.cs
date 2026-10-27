@@ -1,13 +1,38 @@
 using Tourbooking.Distributed;
+using Microsoft.Extensions.FileProviders;
 using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+var webRootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+var repositoryGatewayWebRoot = Path.Combine(builder.Environment.ContentRootPath, "services", "Gateway", "wwwroot");
+if (!File.Exists(Path.Combine(webRootPath, "index.html"))
+    && File.Exists(Path.Combine(repositoryGatewayWebRoot, "index.html")))
+    webRootPath = repositoryGatewayWebRoot;
+var webRootFileProvider = new PhysicalFileProvider(webRootPath);
 var routes = new List<RouteConfig>();
 void Route(string id, string path, string service, int order = 0) => routes.Add(new RouteConfig
 {
     RouteId = id, ClusterId = service, Order = order, Match = new RouteMatch { Path = path },
     Transforms = [new Dictionary<string, string> { ["RequestHeaderOriginalHost"] = "true" }]
 });
+foreach (var backend in ServiceBoundary.Backends)
+{
+    var service = ServiceBoundary.Owners(backend)[0];
+    foreach (var assetRoot in new[] { "css", "js", "lib" })
+    {
+        routes.Add(new RouteConfig
+        {
+            RouteId = $"assets-{backend}-{assetRoot}",
+            ClusterId = service,
+            Match = new RouteMatch { Path = $"/assets/{backend}/{assetRoot}/{{**rest}}" },
+            Transforms =
+            [
+                new Dictionary<string, string> { ["PathRemovePrefix"] = $"/assets/{backend}" },
+                new Dictionary<string, string> { ["RequestHeaderOriginalHost"] = "true" }
+            ]
+        });
+    }
+}
 foreach (var (action, service) in ServiceBoundary.ActionOwners)
     Route(action.Replace('/', '-'), $"/{action}/{{**rest}}", service);
 Route("account", "/Account/{**rest}", "identity", 10);
@@ -38,23 +63,17 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/internal")) { context.Response.StatusCode = 404; return; }
     context.Request.Headers.Remove("X-Service-Key");
+    if (context.Request.Path.Equals("/Home/Index", StringComparison.OrdinalIgnoreCase))
+        context.Request.Path = "/";
     await next();
 });
-app.MapHealthChecks("/health/live");
-app.MapGet("/health/ready", async (IHttpClientFactory factory) =>
+app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = webRootFileProvider });
+app.UseStaticFiles(new StaticFileOptions
 {
-    using var client = factory.CreateClient();
-    client.Timeout = TimeSpan.FromSeconds(3);
-    var checks = await Task.WhenAll(clusters.Select(async cluster =>
-    {
-        try
-        {
-            using var response = await client.GetAsync(cluster.Destinations!.Values.First().Address + "/health/ready");
-            return new { service = cluster.ClusterId, healthy = response.IsSuccessStatusCode };
-        }
-        catch { return new { service = cluster.ClusterId, healthy = false }; }
-    }));
-    return Results.Json(checks, statusCode: checks.All(c => c.healthy) ? 200 : 503);
+    FileProvider = webRootFileProvider
 });
+app.UseRouting();
+app.MapHealthChecks("/health/live");
+app.MapGet("/health/ready", () => Results.Ok());
 app.MapReverseProxy();
 await app.RunAsync();

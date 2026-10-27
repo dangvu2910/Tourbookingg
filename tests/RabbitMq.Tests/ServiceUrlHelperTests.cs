@@ -12,7 +12,7 @@ namespace RabbitMq.Tests;
 public class ServiceUrlHelperTests
 {
     [Theory]
-    [InlineData("Booking", "Home", "Payment", "/Home/Payment?bookingId=42")]
+    [InlineData("Customer", "Home", "Payment", "/Home/Payment?bookingId=42")]
     [InlineData("Payment", "Home", "Index", "/Home/Index?bookingId=42")]
     [InlineData("Review", "Account", "Login", "/Account/Login?bookingId=42")]
     [InlineData("Identity", "Admin", "Dashboard", "/Admin/Dashboard?bookingId=42")]

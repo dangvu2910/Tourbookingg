@@ -1,0 +1,145 @@
+@model Tourbooking.ViewModels.AccountReviewsViewModel
+
+@{
+    ViewData["Title"] = "Đánh giá của tôi";
+    var vnd = CultureInfo.GetCultureInfo("vi-VN");
+}
+
+<link rel="stylesheet" href="/assets/customer/css/profile.css" />
+<link rel="stylesheet" href="/assets/customer/css/account-bookings.css" />
+
+<div class="profile-page">
+    <div class="profile-shell">
+        <aside class="profile-sidebar">
+            <h2>Cài đặt</h2>
+            <p class="profile-subtitle">Đánh giá những trải nghiệm bạn đã đi</p>
+
+            <nav class="profile-nav">
+                <a class="profile-link" asp-action="Profile">Thông tin cá nhân</a>
+                <a class="profile-link" asp-action="ChangePassword">Đổi mật khẩu</a>
+                <a class="profile-link" asp-action="Bookings">Quản lý đặt chỗ</a>
+                <a class="profile-link active" asp-action="Reviews">Đánh giá của tôi</a>
+            </nav>
+
+            <form asp-controller="Account" asp-action="Logout" method="post" class="profile-logout">
+                @Html.AntiForgeryToken()
+                <button type="submit">Đăng xuất</button>
+            </form>
+        </aside>
+
+        <section class="profile-main">
+            <div class="profile-card">
+                <div class="bookings-header">
+                    <div>
+                        <h3>Đánh giá của tôi</h3>
+                        <p>Chỉ hiển thị các tour đã hoàn thành và chưa bị hủy.</p>
+                        @if (TempData["ReviewMessage"] is string reviewMessage)
+                        {
+                            <p class="text-success mt-2">@reviewMessage</p>
+                        }
+                    </div>
+                    <div class="bookings-tabs">
+                        <span class="bookings-tab active">Tour đã đi (@Model.Reviews.Count)</span>
+                    </div>
+                </div>
+
+                <div class="booking-list">
+                    @if (Model.Reviews.Any())
+                    {
+                        foreach (var review in Model.Reviews)
+                        {
+                            <article class="booking-item align-items-start">
+                                <div class="booking-thumb">
+                                    @if (!string.IsNullOrWhiteSpace(review.ImageUrl))
+                                    {
+                                        <img src="@Url.Content(review.ImageUrl)" alt="@review.TourName" />
+                                    }
+                                    else
+                                    {
+                                        <span>Chưa có ảnh</span>
+                                    }
+                                </div>
+
+                                <div class="booking-info">
+                                    <h4>@review.TourName</h4>
+                                    <p>📍 @review.TourLocation</p>
+                                    <div class="booking-meta">
+                                        <span>Mã: VOY-@review.BookingId</span>
+                                        <span>Ngày đi: @review.TravelDate.ToString("dd/MM/yyyy")</span>
+                                    </div>
+
+                                    @if (review.HasReview)
+                                    {
+                                        <div class="mt-3 p-3 rounded-3" style="background:#f8f5f1; border:1px solid #e7dfd8;">
+                                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                                <div>
+                                                    <strong>@review.Title</strong>
+                                                    <div class="text-warning">@string.Concat(Enumerable.Repeat("★", review.Rating ?? 0))</div>
+                                                </div>
+                                                @if (review.ReviewedAt.HasValue)
+                                                {
+                                                    <small class="text-muted">@review.ReviewedAt.Value.ToLocalTime().ToString("dd/MM/yyyy")</small>
+                                                }
+                                            </div>
+                                            <p class="mb-0 mt-2">@review.Content</p>
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="booking-price" style="min-width: 320px; max-width: 420px; text-align:left;">
+                                    @if (review.HasReview)
+                                    {
+                                        <span>Trạng thái</span>
+                                        <strong>Đã đánh giá</strong>
+                                        <span class="status-pill confirmed">Hoàn tất</span>
+                                    }
+                                    else if (review.CanReview)
+                                    {
+                                        <span>Gửi đánh giá</span>
+                                        <form asp-action="Reviews" method="post" class="mt-3">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="bookingId" value="@review.BookingId" />
+
+                                            <div class="mb-3">
+                                                <label class="form-label">Số sao</label>
+                                                <select name="rating" class="form-select" required>
+                                                    <option value="5">5 sao</option>
+                                                    <option value="4">4 sao</option>
+                                                    <option value="3">3 sao</option>
+                                                    <option value="2">2 sao</option>
+                                                    <option value="1">1 sao</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label">Tiêu đề</label>
+                                                <input name="title" class="form-control" maxlength="120" placeholder="Ví dụ: Tour rất đáng tiền" required />
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label">Nội dung</label>
+                                                <textarea name="content" class="form-control" rows="4" maxlength="1000" placeholder="Chia sẻ trải nghiệm của bạn..." required></textarea>
+                                            </div>
+
+                                            <button type="submit" class="btn btn-primary">Lưu đánh giá</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span>Gợi ý</span>
+                                        <strong>Chưa đủ điều kiện</strong>
+                                        <span class="status-pill pending mt-2">Chưa thể đánh giá</span>
+                                    }
+                                </div>
+                            </article>
+                        }
+                    }
+                    else
+                    {
+                        <p>Bạn chưa có tour đủ điều kiện để đánh giá.</p>
+                    }
+                </div>
+            </div>
+        </section>
+    </div>
+</div>

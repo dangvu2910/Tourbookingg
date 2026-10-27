@@ -171,6 +171,8 @@ services:
       args: { SERVICE: Gateway }
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - tour-images:/app/wwwroot/images
     environment:
       Services__identity: http://identity:8080
       Services__catalog: http://catalog:8080
@@ -180,15 +182,6 @@ services:
       Services__support: http://support:8080
       Services__reporting: http://reporting:8080
       Services__notification: http://notification:8080
-    depends_on:
-      identity: { condition: service_healthy }
-      catalog: { condition: service_healthy }
-      booking: { condition: service_healthy }
-      payment: { condition: service_healthy }
-      review: { condition: service_healthy }
-      support: { condition: service_healthy }
-      reporting: { condition: service_healthy }
-      notification: { condition: service_healthy }
 
   tests:
     profiles: ["test"]

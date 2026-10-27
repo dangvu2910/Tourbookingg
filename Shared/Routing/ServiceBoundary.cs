@@ -4,27 +4,28 @@ namespace Tourbooking.Distributed;
 public static class ServiceBoundary
 {
     public static readonly string[] Services = ["identity", "catalog", "booking", "notification", "payment", "review", "support", "reporting"];
-    public static readonly string[] Backends = ["identity", "catalog", "booking-platform", "customer-experience", "notification"];
+    public static readonly string[] Backends = ["identity", "catalog", "booking", "customer", "notification"];
 
     public static string[] Owners(string backend) => backend switch
     {
-        "booking-platform" => ["booking", "payment", "reporting"],
-        "customer-experience" => ["review", "support"],
+        "booking" => ["booking", "payment", "reporting"],
+        "customer" => ["review", "support"],
         "identity" or "catalog" or "notification" => [backend],
         _ => []
     };
 
     public static string BackendFor(string service) => service switch
     {
-        "payment" or "reporting" => "booking-platform",
-        "review" or "support" => "customer-experience",
+        "payment" or "reporting" => "booking",
+        "review" or "support" => "customer",
         _ => service
     };
 
     // These owners select actions from the logical service assemblies loaded by each backend.
     public static readonly IReadOnlyDictionary<string, string> ActionOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["Account/Bookings"] = "booking", ["Account/CancelBooking"] = "booking", ["Account/RescheduleBooking"] = "booking",
+        ["Account/Bookings"] = "booking", ["Account/Ticket"] = "booking",
+        ["Account/CancelBooking"] = "booking", ["Account/RescheduleBooking"] = "booking",
         ["Account/Reviews"] = "review", ["Account/VoteReview"] = "review",
         ["Home/Booking"] = "booking", ["Home/Payment"] = "payment", ["Home/ConfirmPayment"] = "payment",
         ["Home/Contact"] = "support", ["Home/ContactDetails"] = "support", ["Home/PostReply"] = "support", ["Home/ContactMessages"] = "support",

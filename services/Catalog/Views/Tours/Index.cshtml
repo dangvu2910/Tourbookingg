@@ -93,7 +93,7 @@
     }
 }
 
-<link rel="stylesheet" href="~/css/tours.css" asp-append-version="true" />
+<link rel="stylesheet" href="/assets/catalog/css/tours.css" />
 
 <div class="tours-page">
     <div class="tours-shell">
@@ -192,6 +192,10 @@
                                         <span class="tour-tag">@item.Location</span>
                                         <span class="tour-tag">@GetDurationLabel(item.Name)</span>
                                     </div>
+                                    <div class="tour-schedule">
+                                        <span>Đi: @item.DepartureTime.ToString("HH:mm")</span>
+                                        <span>Về: @item.ReturnTime.ToString("HH:mm")</span>
+                                    </div>
                                     <div class="tour-price">
                                         <strong>@item.Price.ToString("C0", vnd)</strong>
                                         <span class="tour-cta">→</span>
@@ -214,6 +218,8 @@
                 }
             </div>
 
+            @if (totalPages > 1)
+            {
             <div class="pagination-ui">
                 @{
                     var regionQuery = selectedRegions.Length > 0
@@ -226,15 +232,22 @@
                     var prevLink = string.IsNullOrWhiteSpace(regionQuery) ? prevUrl : $"{prevUrl}&{regionQuery}";
                     var nextLink = string.IsNullOrWhiteSpace(regionQuery) ? nextUrl : $"{nextUrl}&{regionQuery}";
                 }
-                <a class="page-btn" href="@prevLink">‹</a>
+                @if (currentPage > 1)
+                {
+                    <a class="page-btn" href="@prevLink">‹</a>
+                }
                 @for (var i = 1; i <= totalPages; i++)
                 {
                     var pageUrl = Url.Action("Index", new { page = i, query, minPrice, maxPrice }) ?? string.Empty;
                     var pageLink = string.IsNullOrWhiteSpace(regionQuery) ? pageUrl : $"{pageUrl}&{regionQuery}";
                     <a class="page-btn @(i == currentPage ? "active" : "")" href="@pageLink">@i</a>
                 }
-                <a class="page-btn" href="@nextLink">›</a>
+                @if (currentPage < totalPages)
+                {
+                    <a class="page-btn" href="@nextLink">›</a>
+                }
             </div>
+            }
         </section>
     </div>
 </div>

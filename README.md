@@ -1,8 +1,22 @@
-# Tour Booking — SQLite theo backend group
+# Tour Booking
 
-Ứng dụng gồm Gateway, RabbitMQ và 5 backend: Identity, Catalog, Booking Platform (Booking + Payment + Reporting), Customer Experience (Review + Support), Notification. Các chức năng vẫn giữ URL cũ; mỗi backend vật lý có một file SQLite riêng. Gateway không có database.
+Ứng dụng web đặt tour, chạy bằng Docker Compose. Gateway là cổng truy cập web tại `http://localhost:8080`; các backend xử lý nghiệp vụ và RabbitMQ chạy riêng.
 
-## Chạy với dữ liệu đã chuyển
+## Yêu cầu
+
+- Windows với PowerShell
+- Docker Desktop (bao gồm Docker Engine và Docker Compose) đang chạy
+- .NET SDK 10 nếu muốn chạy test trực tiếp trên máy
+
+Nếu Docker đã chạy nhưng chưa có lệnh `docker compose`, có thể cài Compose độc lập bằng script:
+
+```powershell
+.\scripts\Setup-Compose.ps1
+```
+
+## Chạy ứng dụng
+
+Từ thư mục dự án:
 
 ```powershell
 .\scripts\Initialize-Environment.ps1
@@ -10,65 +24,90 @@
 .\scripts\Compose.ps1 ps
 ```
 
-Mở **http://localhost:8080**. Tài khoản và mật khẩu cũ được giữ sau khi chuyển đổi. Admin dự phòng được cấu hình trong `.env`. Không commit file dữ liệu hoặc `.env`.
+Mở [http://localhost:8080](http://localhost:8080). Thông tin đăng nhập quản trị nằm trong file `.env` được tạo ở bước đầu; giữ kín file này và không commit nó.
 
-## Chuyển một bản dữ liệu SQL Server mới
+Để dừng toàn bộ ứng dụng mà vẫn giữ dữ liệu:
+
+```powershell
+.\scripts\Compose.ps1 down
+```
+
+Để dừng một backend, ví dụ Catalog:
+
+```powershell
+.\scripts\Compose.ps1 stop catalog
+```
+
+Gateway và các backend còn lại vẫn chạy, nhưng những chức năng cần Catalog sẽ tạm thời không dùng được. Giữ `gateway` chạy để truy cập web. Tên backend có thể dừng riêng gồm `identity`, `catalog`, `booking`, `customer` và `notification`. Dừng RabbitMQ chỉ làm chậm các thông báo bất đồng bộ; Booking và Customer không cần RabbitMQ để khởi động.
+
+## Các service và dữ liệu
+
+| Thành phần | Chức năng | Database |
+| --- | --- | --- |
+| Gateway | Cổng web công khai, trang chủ độc lập, phục vụ ảnh dùng chung và định tuyến request | Không có |
+| Identity | Tài khoản và xác thực | `services/Identity/data/identity.db` |
+| Catalog | Tour | `services/Catalog/data/catalog.db` |
+| Booking | Booking, Payment và Reporting | `services/booking/data/booking-platform.db` |
+| Customer | Review và Support | `services/customer/data/customer-experience.db` |
+| Notification | Thông báo | `services/Notification/data/notification.db` |
+| RabbitMQ | Chuyển sự kiện giữa các service | Docker volume `rabbit-data` |
+
+Booking gom Booking, Payment và Reporting; Customer gom Review và Support. Các URL công khai hiện có được Gateway định tuyến tới backend sở hữu chức năng đó. Tạo đặt tour sẽ ghi đồng thời booking và thông tin chuyển khoản trong cùng một transaction để người dùng xem được ngay, không phụ thuộc RabbitMQ. Khi user báo đã chuyển khoản, booking được cập nhật sang chờ admin; admin xác nhận hoặc hủy booking và sự kiện trạng thái được gửi bất đồng bộ về trang thông báo của user. RabbitMQ vẫn dùng cho thông báo booking và hỗ trợ; nếu broker tạm dừng, dữ liệu nghiệp vụ vẫn lưu trong outbox để gửi lại sau. Trang chủ tĩnh và CSS riêng của trang chủ thuộc Gateway nên vẫn vào được khi Catalog tắt; các trang tour vẫn cần Catalog. CSS/JS nằm trong `services/<Backend>/wwwroot`, được đóng gói riêng vào image của backend và truy cập qua URL `/assets/<backend>/...`; Gateway chuyển yêu cầu tới đúng backend. Vì vậy CSS của Admin không phụ thuộc Catalog đang chạy. Khi thay đổi CSS hoặc layout, hãy build lại image của Gateway và các backend liên quan.
+
+Nếu cần bổ sung tour mẫu cho Catalog, bật `Database__SeedDemo=true` riêng cho service này. Seed chỉ thêm tour còn thiếu theo tên, không thay đổi tour hiện có.
+
+## Kiểm thử
+
+Chạy test .NET:
+
+```powershell
+dotnet test tests/RabbitMq.Tests/RabbitMq.Tests.csproj
+```
+
+Chạy integration test trong Docker Compose:
+
+```powershell
+.\scripts\Compose.ps1 --profile test run --rm tests
+```
+
+Integration test cần stack đã khởi chạy và dùng cấu hình/tài khoản trong `.env`. Chỉ chạy trên môi trường local hoặc test.
+
+## Backup và khôi phục
+
+Kiểm tra cô lập khi Catalog ngừng hoạt động (stack phải đang chạy):
+
+```powershell
+.\scripts\Test-ServiceIsolation.ps1
+```
+
+Script dừng Catalog, kiểm tra các backend còn lại và tài nguyên CSS qua Gateway, sau đó tự bật lại Catalog và kiểm tra API tour phục hồi. Chức năng cần dữ liệu tour vẫn phụ thuộc Catalog.
+
+Tạo backup:
+
+```powershell
+.\scripts\Backup.ps1
+```
+
+Khôi phục từ một thư mục backup sau khi kiểm tra đúng đường dẫn:
+
+```powershell
+.\scripts\Restore.ps1 -BackupDirectory backups\sqlite-20261027-120000 -Apply
+```
+
+Thay đường dẫn ví dụ bằng thư mục backup thực tế. Khôi phục sẽ thay database hiện tại; script kiểm tra checksum và lưu dữ liệu đang có trước khi thay. Không xóa các thư mục `services\*\data` hoặc Docker volumes nếu cần giữ database, khóa xác thực, ảnh tour và dữ liệu RabbitMQ.
+
+## Chuyển dữ liệu SQL Server cũ
+
+SQL Server không cần thiết để chạy cấu hình SQLite hiện tại. Chỉ dùng `compose.sqlserver.yaml` và script bên dưới khi cần chuyển dữ liệu từ hệ thống SQL Server cũ:
 
 ```powershell
 .\scripts\Migrate-ToSqlite.ps1
 ```
 
-SQL Server nguồn phải đang chạy. Script dừng các service ghi dữ liệu, tạo backup nguồn và chuyển vào thư mục staging. Chỉ khi đối chiếu thành công mới tạo thư mục đích `data/sqlite`. Không chạy lại vào thư mục đã có dữ liệu. Có thể chọn đích thử nghiệm khác bằng `-Destination data/sqlite-trial-2`.
+Script yêu cầu SQL Server nguồn đang chạy, giữ nguyên nguồn và không ghi đè database SQLite đã tồn tại. Xem [hướng dẫn chuyển đổi SQL Server cũ](docs/legacy-sqlserver.md) trước khi thực hiện.
 
-`data/sqlite/migration-report.json` chứa số bản ghi và checksum đã kiểm chứng cho 5 backend. Database SQL Server gốc cùng volume backup được giữ lại. Công cụ không xóa hoặc tự thay dữ liệu nguồn bằng dữ liệu mẫu.
+## Tài liệu
 
-## Database riêng
-
-| Backend | File trong dự án | Dữ liệu sở hữu |
-| --- | --- | --- |
-| Identity | `services/Identity/data/identity.db` | Tài khoản, vai trò, thông tin đăng nhập |
-| Catalog | `services/Catalog/data/catalog.db` | Tour |
-| Booking Platform | `services/BookingPlatform/data/booking-platform.db` | Đơn đặt tour, giao dịch; dashboard và xuất báo cáo |
-| Customer Experience | `services/CustomerExperience/data/customer-experience.db` | Đánh giá, bình chọn, yêu cầu hỗ trợ và hội thoại |
-| Notification | `services/Notification/data/notification.db` | Thông báo và khóa chống trùng |
-
-Mỗi logical owner chỉ ghi bảng nghiệp vụ mình sở hữu; các owner được gom cùng backend chia sẻ một file SQLite. Để giữ màn hình hiện có, backend còn có bản sao chỉ đọc của dữ liệu cần tham chiếu, làm mới qua HTTP nội bộ. Các project vẫn dùng chung model EF và thư viện persistence, chưa tách hoàn toàn bounded context.
-
-Chi tiết luồng sự kiện, lý do thiết kế và giới hạn trong [kiến trúc SQLite](docs/kien-truc-sqlite.md).
-
-## Kiểm thử
-
-```powershell
-dotnet test tests/RabbitMq.Tests/RabbitMq.Tests.csproj --filter "FullyQualifiedName~DataIntegrityTests|FullyQualifiedName~ServiceBoundaryTests|FullyQualifiedName~ServiceUrlHelperTests|FullyQualifiedName~SharedSessionValidationTests"
-.\scripts\Compose.ps1 --profile test build tests
-.\scripts\Compose.ps1 --profile test run --rm tests
-```
-
-Kiểm thử dữ liệu dùng SQLite tạm riêng. Kiểm thử workflow tạo tài khoản, booking và hội thoại thử trong hệ thống đang chạy.
-Chạy integration test trong Compose để có RabbitMQ, DNS nội bộ và cấu hình admin từ `.env`; không chạy các workflow này trên dữ liệu production.
-
-## Backup và dữ liệu demo
-
-```powershell
-.\scripts\Backup.ps1
-.\scripts\Restore.ps1 -BackupDirectory backups\ten-ban-backup -Apply
-```
-
-Restore thay dữ liệu hiện tại và giữ bản cũ trong thư mục riêng. Script dừng backend trước khi sao chép dữ liệu, giữ cả WAL nếu có. Không xóa các thư mục `services\*\data`, volume auth keys hoặc ảnh tour khi muốn giữ dữ liệu. Replay sự kiện dùng `.\scripts\Replay-Outbox.ps1 -Service booking -SinceUtc <thoi-diem-UTC>`.
-
-Khi chạy mới với database trống, có thể bật `Database__SeedDemo=true` riêng cho Catalog để tạo ba tour mẫu. Không bật seed khi muốn đối chiếu bản chuyển đổi chính xác.
-
-`compose.sqlserver.yaml` và [tài liệu SQL Server cũ](docs/legacy-sqlserver.md) được giữ để tham khảo nguồn. Rollback ứng dụng cần cả code/image cũ; dữ liệu mới trong SQLite không tự đồng bộ ngược sang SQL Server.
-Database hiện nằm tại `services/<Backend>/data/<backend>.db`. Source của các backend đã gộp được đặt trong `services/BookingPlatform/Modules` và `services/CustomerExperience/Modules`; các database rời cũ đã bỏ sau khi xác minh backup trước gộp tại `backups/pre-consolidation-20261026-104448`.
-
-Migration mặc định xuất dữ liệu đã kiểm chứng theo 5 backend. Dùng `-ExportOnly -Destination data/sqlite-trial-2` nếu chỉ muốn xuất một bản thử riêng, không cài vào service. Backup lưu 5 thư mục database trong `sqlite/<backend>`; Restore hỗ trợ cả backup 5 backend hiện tại và backup 8 database cũ.
-
-Để gom bộ SQLite đang chạy trước đây, tạo backup trước rồi chạy:
-
-```powershell
-.\scripts\Backup.ps1
-.\scripts\Consolidate-Sqlite.ps1 -BackupDirectory backups\ten-ban-backup
-.\scripts\Consolidate-Sqlite.ps1 -BackupDirectory backups\ten-ban-backup -Apply
-```
-
-Lần chạy đầu tạo bản staging đã qua `integrity_check` mà không đổi database hiện tại. Chỉ dùng `-Apply` sau khi kiểm tra staging và backup.
+- [Kiến trúc và giới hạn SQLite](docs/kien-truc-sqlite.md)
+- [Kịch bản demo](docs/kich-ban-demo.md)
+- [Kiểm thử SQLite](docs/kiem-thu-sqlite.md)

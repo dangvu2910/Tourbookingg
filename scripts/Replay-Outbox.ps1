@@ -7,8 +7,8 @@ $backend = switch ($Service) {
     default { $Service }
 }
 $serviceFolder = switch ($backend) {
-    'booking-platform' { 'BookingPlatform' }
-    'customer-experience' { 'CustomerExperience' }
+    'booking-platform' { 'booking' }
+    'customer-experience' { 'customer' }
     default { [cultureinfo]::InvariantCulture.TextInfo.ToTitleCase($backend) }
 }
 $databasePath = Join-Path $projectRoot "services/$serviceFolder/data/$backend.db"

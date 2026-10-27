@@ -8,8 +8,8 @@ $backupRoot = (Resolve-Path -LiteralPath $OutputDirectory).Path
 $groupedBackends = @(
     @{ Name='identity'; Folder='Identity'; Database='identity' },
     @{ Name='catalog'; Folder='Catalog'; Database='catalog' },
-    @{ Name='booking-platform'; Folder='BookingPlatform'; Database='booking-platform' },
-    @{ Name='customer-experience'; Folder='CustomerExperience'; Database='customer-experience' },
+    @{ Name='booking-platform'; Folder='booking'; Database='booking-platform' },
+    @{ Name='customer-experience'; Folder='customer'; Database='customer-experience' },
     @{ Name='notification'; Folder='Notification'; Database='notification' }
 )
 $legacyBackends = @(
@@ -22,8 +22,8 @@ $legacyBackends = @(
     @{ Name='reporting'; Folder='Reporting'; Database='reporting' },
     @{ Name='notification'; Folder='Notification'; Database='notification' }
 )
-$groupedReady = (Test-Path -LiteralPath (Join-Path $projectRoot 'services\BookingPlatform\data\booking-platform.db')) `
-    -and (Test-Path -LiteralPath (Join-Path $projectRoot 'services\CustomerExperience\data\customer-experience.db'))
+$groupedReady = (Test-Path -LiteralPath (Join-Path $projectRoot 'services\booking\data\booking-platform.db')) `
+    -and (Test-Path -LiteralPath (Join-Path $projectRoot 'services\customer\data\customer-experience.db'))
 $backends = if ($groupedReady) { $groupedBackends } else { $legacyBackends }
 foreach ($backend in $backends) {
     if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "services\$($backend.Folder)\data\$($backend.Database).db"))) {

@@ -93,7 +93,12 @@ public class DataIntegrityTests : IDisposable
     [Fact]
     public async Task ForeignTablesCannotBeWritten()
     {
-        await using var db = Context();
+        Directory.CreateDirectory(_folder);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>
+            { ["Service:Name"] = "customer", ["RabbitMQ:Enabled"] = "true" }).Build();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_folder, "customer.db")};Foreign Keys=False").Options, config);
+        await db.Database.EnsureCreatedAsync();
         db.Payments.Add(new Payment { BookingId = 1, UserId = "test-user", Amount = 123.45m });
         await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
     }
@@ -117,21 +122,23 @@ public class DataIntegrityTests : IDisposable
     }
 
     [Fact]
-    public async Task WorkflowRedeliveryDoesNotCreateDuplicatePayment()
+    public async Task BookingAndPaymentCanBeCreatedInOneTransactionWithoutPaymentEvents()
     {
-        Directory.CreateDirectory(_folder);
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>
-            { ["Service:Name"] = "payment", ["RabbitMQ:Enabled"] = "true" }).Build();
-        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlite($"Data Source={Path.Combine(_folder, "payment.db")};Foreign Keys=False").Options, config);
-        await db.Database.EnsureCreatedAsync();
-        var evt = new IntegrationEvent(Guid.NewGuid(), "booking.created", "booking", "42", "customer", null,
-            "PendingConfirmation", DateTime.UtcNow, "test", System.Text.Json.JsonSerializer.Serialize(new BookingEventData(42, "customer", 1234567.89m, "PendingConfirmation")));
-        await BookingPaymentConsumer.HandleAsync(db, evt, config, default);
-        await BookingPaymentConsumer.HandleAsync(db, evt, config, default);
-        var payment = await db.Payments.SingleAsync();
-        Assert.Equal(1234567.89m, payment.Amount);
-        Assert.Single(await db.InboxMessages.ToListAsync());
+        await using var db = Context();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var booking = await NewBooking(db);
+        db.Bookings.Add(booking);
+        await db.SaveChangesAsync();
+        db.Payments.Add(new Payment
+        {
+            BookingId = booking.BookingId, UserId = booking.UserId, Amount = booking.TotalPrice,
+            Method = "BankTransfer", Status = "PendingConfirmation"
+        });
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        Assert.Single(await db.Payments.Where(p => p.BookingId == booking.BookingId).ToListAsync());
+        Assert.False(await db.OutboxMessages.AnyAsync(m => m.Type.StartsWith("payment.")));
     }
 
     public void Dispose()

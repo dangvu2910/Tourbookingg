@@ -15,16 +15,15 @@ flowchart TB
     U[Trình duyệt] --> G[Gateway YARP]
     G --> I[Identity]
     G --> C[Catalog]
-    G --> BP[Booking Platform]
-    G --> CX[Customer Experience]
+    G --> BP[Booking]
+    G --> CX[Customer]
     G --> N[Notification API]
     I --> ID[(Identity SQLite)]
     C --> CD[(Catalog SQLite)]
-    BP --> BPD[(Booking Platform SQLite)]
-    CX --> CXD[(Customer Experience SQLite)]
+    BP --> BPD[(Booking SQLite)]
+    CX --> CXD[(Customer SQLite)]
     N --> ND[(Notification SQLite)]
     BP -->|Outbox worker| Q[RabbitMQ topic exchange]
-    Q -->|Consumer + inbox| BP
     Q -->|Consumer + inbox| N
     S -->|Outbox worker| Q
     Q -->|contact events| N
@@ -34,7 +33,7 @@ flowchart TB
     K --- N
 ```
 
-Gateway định tuyến theo controller/action để giữ URL cũ. Identity xử lý xác thực; Catalog sở hữu tour; Booking Platform gom đặt/hủy/đổi lịch, thanh toán, dashboard và xuất Excel; Customer Experience gom đánh giá, bình chọn, tư vấn và phản hồi; Notification nhận sự kiện. Có 5 backend vật lý với database riêng; các controller logic được nạp vào đúng host và lọc theo owner. Thư viện persistence và hạ tầng chung nằm trong Shared/.
+Gateway định tuyến theo controller/action để giữ URL cũ. Identity xử lý xác thực; Catalog sở hữu tour; Booking gom đặt/hủy/đổi lịch, thanh toán, dashboard và xuất Excel; Customer gom đánh giá, bình chọn, tư vấn và phản hồi; Notification nhận sự kiện. Có 5 backend vật lý với database riêng; các controller logic được nạp vào đúng host và lọc theo owner. Thư viện persistence và hạ tầng chung nằm trong Shared/.
 
 Mỗi backend vật lý có file SQLite riêng; Booking/Payment/Reporting chia sẻ file, Review/Support chia sẻ file nhưng mỗi logical owner chỉ ghi bảng của mình. Gateway không sở hữu database. Một số bản sao chỉ đọc được làm mới từ service nguồn. Các project vẫn dùng chung model EF và thư viện hạ tầng; đây là kiến trúc phù hợp demo/đồ án, chưa phải microservice độc lập hoàn toàn theo bounded context.
 
@@ -46,44 +45,42 @@ Mỗi container ứng dụng là một tiến trình ASP.NET Core. Request HTTP 
 sequenceDiagram
     actor Khach as Khách hàng
     participant G as Gateway
-    participant B as Booking Platform
-    participant DB as Booking Platform SQLite
+    participant B as Booking
+    participant DB as Booking SQLite
     participant W as Outbox Worker
     participant R as RabbitMQ
     participant N as Notification
-    participant P as Payment workflow
-    participant PD as Booking Platform SQLite
     participant ND as Notification SQLite
     Khach->>G: POST /Home/Booking + CSRF + RequestId
     G->>B: Chuyển tiếp cookie và request
-    B->>DB: Lưu booking và outbox trong transaction
-    B->>DB: COMMIT
+    B->>DB: Lưu booking + payment + booking.created trong transaction
+    B->>DB: COMMIT, payment sẵn sàng
     B-->>Khach: Chuyển đến trang thanh toán
+    Khach->>G: Báo đã chuyển khoản
+    G->>B: Cập nhật payment + booking Processing đồng bộ
+    B->>DB: Lưu thay đổi + booking.updated trong transaction
     W->>DB: Claim lease sự kiện
     W->>R: Publish persistent, mandatory
     R-->>W: Publisher confirm
     W->>DB: Đánh dấu PublishedAt
-    R->>P: Deliver booking event
-    P->>PD: Ghi Payment và inbox trong cùng database
-    P->>R: ACK sau commit
     R->>N: Deliver notification event
     N->>ND: INSERT thông báo vào database riêng
     N->>R: ACK sau commit
 ```
 
-Nếu worker chết sau khi publish nhưng trước khi ghi PublishedAt, sự kiện được phát lại khi lease hết hạn. Consumer khử trùng bằng EventId. Đây là giao nhận ít nhất một lần với hiệu ứng lưu thông báo không trùng, không phải cam kết exactly-once trên toàn hệ thống.
+Nếu worker chết sau khi publish nhưng trước khi ghi PublishedAt, sự kiện được phát lại khi lease hết hạn. Notification khử trùng bằng EventId. Đây là giao nhận ít nhất một lần với hiệu ứng lưu thông báo không trùng, không phải cam kết exactly-once trên toàn hệ thống.
 
 ## Chương 4 Trao đổi thông tin
 
 HTTP được dùng giữa trình duyệt, Gateway và dịch vụ đích. API đọc gồm `/api/tours`, `/api/identity/me`, `/api/bookings` và `/api/notifications`. Form MVC là các endpoint ghi, có antiforgery token. Màn hình thông báo gọi Notification API qua HTTP nội bộ và chuyển cookie của chính người dùng để áp dụng phân quyền.
 
-RabbitMQ dùng topic exchange `tourbooking.events` và các event `booking.created`, `booking.updated`, `payment.created`, `payment.updated`, `contact.created`, `contact.updated`, `contact.reply.created`. Envelope gồm EventId, Type, Source, ResourceId, UserId, Email, Status, OccurredAt và CorrelationId. Không đưa mật khẩu hoặc cookie vào message. Sự kiện hiện là thông tin trạng thái, chưa phải nhật ký event sourcing đầy đủ.
+RabbitMQ dùng topic exchange `tourbooking.events` và các event `booking.created`, `booking.updated`, `contact.created`, `contact.updated`, `contact.reply.created`. Booking và Payment xử lý đồng bộ trong backend Booking; event booking được phát bất đồng bộ để Notification cập nhật người dùng. Envelope gồm EventId, Type, Source, ResourceId, UserId, Email, Status, OccurredAt và CorrelationId. Không đưa mật khẩu hoặc cookie vào message. Sự kiện hiện là thông tin trạng thái, chưa phải nhật ký event sourcing đầy đủ.
 
 Queue chính, retry và dead-letter đều durable; publisher đặt persistent. Publisher confirms cho biết broker đã tiếp nhận publish. Consumer ACK chỉ sau khi database commit. Hai xác nhận này phục vụ hai giai đoạn riêng của luồng giao nhận. Chi tiết giao thức: [RabbitMQ confirms](https://www.rabbitmq.com/docs/confirms) và [reliability](https://www.rabbitmq.com/docs/reliability).
 
 ## Chương 5 Định danh
 
-Docker DNS định vị dịch vụ bằng tên `identity`, `catalog`, `booking`, `payment`, `review`, `support`, `reporting`, `notification` và `rabbitmq`. Các tên có thể giữ ổn định khi IP container thay đổi. URI định danh tài nguyên HTTP; ID nghiệp vụ là khóa của database service sở hữu, còn EventId, RequestId và CorrelationId là GUID.
+Docker DNS định vị các backend bằng tên `identity`, `catalog`, `booking`, `customer`, `notification` và `rabbitmq`. Gateway vẫn giữ các logical route cho `payment`, `review`, `support` và `reporting`, nhưng chúng được chuyển tới backend tương ứng. Các tên có thể giữ ổn định khi IP container thay đổi. URI định danh tài nguyên HTTP; ID nghiệp vụ là khóa của database service sở hữu, còn EventId, RequestId và CorrelationId là GUID.
 
 EventId và RequestId là GUID. RequestId đặt trong form, có unique index trong database Booking và được kiểm tra theo người dùng để gửi lại cùng yêu cầu không tạo booking thứ hai. EventId được giữ nguyên khi retry/publish lại. CorrelationId xuất phát từ trace HTTP, được đưa vào event và log consumer; response nghiệp vụ có header X-Correlation-ID và X-Service-Name.
 
@@ -91,9 +88,9 @@ Xác thực dùng ASP.NET Core Identity cookie. Các dịch vụ dùng chung app
 
 ## Chương 6 Đồng bộ hóa
 
-Booking và Payment dùng concurrency token trong database SQLite riêng. EF Core đưa phiên bản cũ vào điều kiện UPDATE; nếu request khác đã cập nhật, thao tác sau bị từ chối và HTTP trả 409, yêu cầu tải lại dữ liệu. Unique RequestId chống duplicate booking kể cả khi hai request cùng vượt qua bước kiểm tra ban đầu.
+Booking và Payment dùng concurrency token trong cùng database SQLite của backend Booking. EF Core đưa phiên bản cũ vào điều kiện UPDATE; nếu request khác đã cập nhật, thao tác sau bị từ chối và HTTP trả 409, yêu cầu tải lại dữ liệu. Unique RequestId chống duplicate booking kể cả khi hai request cùng vượt qua bước kiểm tra ban đầu.
 
-Outbox cùng dữ liệu nghiệp vụ nằm trong transaction của database service phát sự kiện. Worker claim lease để khôi phục xử lý sau khi tiến trình chết. Một publish chậm quá lease vẫn có thể gây phát trùng; inbox/khóa EventId tại consumer xử lý trường hợp này. Không có transaction phân tán giữa Booking và Payment; trạng thái liên service được đồng bộ bất đồng bộ.
+Outbox cùng dữ liệu nghiệp vụ nằm trong transaction của database service phát sự kiện. Worker claim lease để khôi phục xử lý sau khi tiến trình chết. Một publish chậm quá lease vẫn có thể gây phát trùng; khóa EventId tại Notification xử lý trường hợp này. Booking và Payment không còn đồng bộ qua RabbitMQ vì cùng được lưu trong một backend/database.
 
 Notification dùng khóa chính EventId như inbox đồng thời cũng là bản ghi thông báo. Kiểm tra trước khi INSERT giúp giảm xung đột; unique key là cơ chế quyết định khi nhiều consumer nhận trùng đồng thời. Không dùng Redis distributed lock vì các thao tác đang cần đồng bộ đều có thể giải quyết bằng transaction, lease và ràng buộc SQL.
 

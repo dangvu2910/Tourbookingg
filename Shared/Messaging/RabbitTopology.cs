@@ -30,17 +30,6 @@ public static class RabbitTopology
             ["x-dead-letter-routing-key"] = DeadQueue
         }, cancellationToken: ct);
         await channel.QueueBindAsync(Queue, Exchange, "#", cancellationToken: ct);
-        // Declare workflow queues from producers too: an event must survive a consumer starting late.
-        foreach (var service in new[] { "booking", "payment" })
-        {
-            var workflow = "tourbooking.workflow." + service;
-            await channel.QueueDeclareAsync(workflow + ".dead", true, false, false, cancellationToken: ct);
-            await channel.QueueDeclareAsync(workflow, true, false, false, new Dictionary<string, object?>
-            {
-                ["x-dead-letter-exchange"] = "", ["x-dead-letter-routing-key"] = workflow + ".dead"
-            }, cancellationToken: ct);
-            await channel.QueueBindAsync(workflow, Exchange, service == "payment" ? "booking.#" : "payment.#", cancellationToken: ct);
-        }
         await channel.QueueDeclareAsync(RetryQueue, true, false, false, arguments: new Dictionary<string, object?>
         {
             ["x-message-ttl"] = 5000,

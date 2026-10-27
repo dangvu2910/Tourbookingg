@@ -43,13 +43,13 @@ public class ServiceBoundaryTests
     public void LogicalServicesMapToFivePhysicalBackends()
     {
         Assert.Equal(5, ServiceBoundary.Backends.Distinct().Count());
-        Assert.Equal("booking-platform", ServiceBoundary.BackendFor("payment"));
-        Assert.Equal("booking-platform", ServiceBoundary.BackendFor("reporting"));
-        Assert.Equal("customer-experience", ServiceBoundary.BackendFor("review"));
-        Assert.Equal("customer-experience", ServiceBoundary.BackendFor("support"));
-        Assert.Equal(new[] { "booking", "payment", "reporting" }, ServiceBoundary.Owners("booking-platform"));
-        Assert.Equal(new[] { "review", "support" }, ServiceBoundary.Owners("customer-experience"));
-        Assert.True(ServiceData.Needs("booking-platform", "catalog"));
-        Assert.True(ServiceData.Needs("customer-experience", "booking"));
+        Assert.Equal("booking", ServiceBoundary.BackendFor("payment"));
+        Assert.Equal("booking", ServiceBoundary.BackendFor("reporting"));
+        Assert.Equal("customer", ServiceBoundary.BackendFor("review"));
+        Assert.Equal("customer", ServiceBoundary.BackendFor("support"));
+        Assert.Equal(new[] { "booking", "payment", "reporting" }, ServiceBoundary.Owners("booking"));
+        Assert.Equal(new[] { "review", "support" }, ServiceBoundary.Owners("customer"));
+        Assert.True(ServiceData.Needs("booking", "catalog"));
+        Assert.True(ServiceData.Needs("customer", "booking"));
     }
 }

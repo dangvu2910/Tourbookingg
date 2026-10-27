@@ -90,7 +90,7 @@ foreach (var service in ServiceBoundary.Backends.Where(s => s != "notification")
     }
     // Preserve historical events without automatically replaying published events.
     var events = outbox.Where(m => ownedServices.Contains(m.Source)
-        || service == "booking-platform" && !ServiceData.Services.Contains(m.Source)).ToList();
+        || service == "booking" && !ServiceData.Services.Contains(m.Source)).ToList();
     target.OutboxMessages.AddRange(events);
     target.ApplyingProjection = true;
     await target.SaveChangesAsync();
@@ -148,8 +148,8 @@ static async Task ConsolidateSqliteAsync(string projectRootArgument, string dest
     {
         ("identity", "Identity", "identity"),
         ("catalog", "Catalog", "catalog"),
-        ("booking-platform", "Booking", "booking-platform"),
-        ("customer-experience", "Review", "customer-experience"),
+        ("booking", "Booking", "booking"),
+        ("customer", "Review", "customer"),
         ("notification", "Notification", "notification")
     })
     {
@@ -170,17 +170,17 @@ static async Task ConsolidateSqliteAsync(string projectRootArgument, string dest
 
     var merged = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
     {
-        ["booking-platform"] = ["Payments"],
-        ["customer-experience"] = ["TourReviews", "TourReviewVotes", "ContactInquiries", "ContactInquiryReplies"]
+        ["booking"] = ["Payments"],
+        ["customer"] = ["TourReviews", "TourReviewVotes", "ContactInquiries", "ContactInquiryReplies"]
     };
     var mergeSources = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
     {
-        ["booking-platform"] = [sourcePaths["Payment"]],
-        ["customer-experience"] = [sourcePaths["Support"]]
+        ["booking"] = [sourcePaths["Payment"]],
+        ["customer"] = [sourcePaths["Support"]]
     };
     var report = new Dictionary<string, Dictionary<string, long>>(StringComparer.OrdinalIgnoreCase);
 
-    foreach (var backend in new[] { "booking-platform", "customer-experience" })
+    foreach (var backend in new[] { "booking", "customer" })
     {
         var targetPath = destinations[backend];
         var tableCounts = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);

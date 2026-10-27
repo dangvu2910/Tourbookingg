@@ -36,8 +36,8 @@ if ($LASTEXITCODE -ne 0) { throw 'SQLite consolidation failed; original database
 $targets = @(
     @{ Name='identity'; Folder='Identity'; File='identity.db' },
     @{ Name='catalog'; Folder='Catalog'; File='catalog.db' },
-    @{ Name='booking-platform'; Folder='BookingPlatform'; File='booking-platform.db' },
-    @{ Name='customer-experience'; Folder='CustomerExperience'; File='customer-experience.db' },
+    @{ Name='booking-platform'; Folder='booking'; File='booking-platform.db' },
+    @{ Name='customer-experience'; Folder='customer'; File='customer-experience.db' },
     @{ Name='notification'; Folder='Notification'; File='notification.db' }
 )
 foreach ($target in $targets) {

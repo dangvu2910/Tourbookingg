@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
@@ -13,25 +13,25 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity", "services\Identi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog", "services\Catalog\Catalog.csproj", "{DE04B8A5-8420-46A7-861C-26D6E02DD453}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Booking", "services\BookingPlatform\Modules\Booking\Booking.csproj", "{9EEE5B06-776C-4D7C-865C-9ABC781F1CD6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Booking", "services\booking\Modules\Booking\Booking.csproj", "{9EEE5B06-776C-4D7C-865C-9ABC781F1CD6}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notification", "services\Notification\Notification.csproj", "{23C0E26C-9FFA-4D90-8BAB-21657BB05FC5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gateway", "services\Gateway\Gateway.csproj", "{D097F107-7715-4003-ABA5-6071C64BFAEC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payment", "services\BookingPlatform\Modules\Payment\Payment.csproj", "{AE3668A1-096E-4BC3-9451-CBF7BC6EB418}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payment", "services\booking\Modules\Payment\Payment.csproj", "{AE3668A1-096E-4BC3-9451-CBF7BC6EB418}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Review", "services\CustomerExperience\Modules\Review\Review.csproj", "{84F352B7-27E6-4A05-B71A-B7FD5D6B3D02}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Review", "services\customer\Modules\Review\Review.csproj", "{84F352B7-27E6-4A05-B71A-B7FD5D6B3D02}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Support", "services\CustomerExperience\Modules\Support\Support.csproj", "{E75B2B56-51D8-4381-B959-F8A8C26BBBD9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Support", "services\customer\Modules\Support\Support.csproj", "{E75B2B56-51D8-4381-B959-F8A8C26BBBD9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reporting", "services\BookingPlatform\Modules\Reporting\Reporting.csproj", "{3A94FAC3-3E90-450D-A7F0-8326A694C923}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reporting", "services\booking\Modules\Reporting\Reporting.csproj", "{3A94FAC3-3E90-450D-A7F0-8326A694C923}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Booking", "Booking", "{1BDCE16F-44E9-1D02-8623-3C0B350C7CC7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Models", "Models", "{F1531B0F-7DAF-6C11-8258-95B953987A25}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Booking.Models", "services\BookingPlatform\Modules\Booking\Models\Booking.Models.csproj", "{FA090CFC-14BF-4090-AB91-F0CD3852A9AA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Booking.Models", "services\booking\Modules\Booking\Models\Booking.Models.csproj", "{FA090CFC-14BF-4090-AB91-F0CD3852A9AA}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Identity", "Identity", "{357A7C97-5AE1-023F-1442-0D9F9AF22A31}"
 EndProject
@@ -49,19 +49,19 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Payment", "Payment",
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Models", "Models", "{7B152D2D-1454-04B3-3116-9C125C08E4C9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payment.Models", "services\BookingPlatform\Modules\Payment\Models\Payment.Models.csproj", "{AF314872-2281-4238-BA74-7EEDB7C6C771}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payment.Models", "services\booking\Modules\Payment\Models\Payment.Models.csproj", "{AF314872-2281-4238-BA74-7EEDB7C6C771}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Review", "Review", "{03FAD54A-6E03-5864-6D7B-18C11DED3A2F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Models", "Models", "{B914FCF7-EB49-033A-54C9-E371577A461A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Review.Models", "services\CustomerExperience\Modules\Review\Models\Review.Models.csproj", "{7531D90A-A060-4E3E-A5D5-D29F130954C5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Review.Models", "services\customer\Modules\Review\Models\Review.Models.csproj", "{7531D90A-A060-4E3E-A5D5-D29F130954C5}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Support", "Support", "{0B3A346E-6AD3-5B15-0216-BF2A9443FC2F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Models", "Models", "{DD097050-C16E-52AD-55D6-2EDAF283B59D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Support.Models", "services\CustomerExperience\Modules\Support\Models\Support.Models.csproj", "{A7A479BE-CB44-45A3-A4A1-ECD7C59FD9BC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Support.Models", "services\customer\Modules\Support\Models\Support.Models.csproj", "{A7A479BE-CB44-45A3-A4A1-ECD7C59FD9BC}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Shared", "Shared", "{4F52FD11-658E-A102-6CD3-7D7C16FFA15B}"
 EndProject
@@ -85,9 +85,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Folder.Presentation", "Pres
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tourbooking.Presentation", "Shared\Presentation\Tourbooking.Presentation.csproj", "{81D5A1A5-DBBD-4C91-A777-4EA59F6EB4BE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BookingPlatform", "services\BookingPlatform\BookingPlatform.csproj", "{86BA2599-AF05-4C05-8ED3-35488DBCB008}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BookingPlatform", "services\booking\BookingPlatform.csproj", "{86BA2599-AF05-4C05-8ED3-35488DBCB008}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerExperience", "services\CustomerExperience\CustomerExperience.csproj", "{C4AC99A8-131A-4766-AE77-F8E6B3034FEA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerExperience", "services\customer\CustomerExperience.csproj", "{C4AC99A8-131A-4766-AE77-F8E6B3034FEA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

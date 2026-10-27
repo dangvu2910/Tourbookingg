@@ -149,7 +149,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         if (ApplyingProjection) return await base.SaveChangesAsync(cancellationToken);
         var changed = ChangeTracker.Entries()
             .Where(e => EventsEnabled && (e.State == EntityState.Added || e.State == EntityState.Modified)
-                && (e.Entity is Booking || e.Entity is Payment || e.Entity is ContactInquiry || e.Entity is ContactInquiryReply))
+                && (e.Entity is Booking || e.Entity is ContactInquiry || e.Entity is ContactInquiryReply))
             .Select(e => (e.Entity, Added: e.State == EntityState.Added,
                 StatusChanged: e.State == EntityState.Added || e.Entity is ContactInquiryReply || e.Property("Status").IsModified))
             .Where(e => e.StatusChanged || e.Entity is Booking).ToList();
@@ -165,7 +165,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 var (kind, id, userId, email, status) = entity switch
                 {
                     Booking b => ("booking", b.BookingId.ToString(), b.UserId, b.Email, b.Status),
-                    Payment p => ("payment", p.PaymentId.ToString(), p.UserId, (string?)null, p.Status),
                     ContactInquiry c => ("contact", c.ContactInquiryId.ToString(), c.UserId, c.Email, c.Status),
                     ContactInquiryReply r => ("contact.reply", r.ContactInquiryId.ToString(),
                         ContactInquiries.Find(r.ContactInquiryId)?.UserId, (string?)null, r.IsFromAdmin ? "AdminReplied" : "CustomerReplied"),
@@ -175,14 +174,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                     ServiceData.Owner(entity switch
                     {
                         Booking => "Bookings",
-                        Payment => "Payments",
                         ContactInquiry => "ContactInquiries",
                         ContactInquiryReply => "ContactInquiryReplies",
                         _ => throw new InvalidOperationException()
                     }), id, userId, email, status, DateTime.UtcNow,
                     Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
                     entity is Booking booking ? JsonSerializer.Serialize(new BookingEventData(booking.BookingId, booking.UserId, booking.TotalPrice, booking.Status))
-                    : entity is Payment payment ? JsonSerializer.Serialize(new PaymentEventData(payment.BookingId)) : null);
+                    : null);
                 OutboxMessages.Add(new OutboxMessage
                 {
                     Id = evt.EventId, Source = evt.Source, Type = evt.Type,
