@@ -25,4 +25,5 @@ public record AdminBookingRow(
     string TotalPrice,
     string Status,
     string? PaymentStatus,
-    string? TransactionCode);
+    string? TransactionCode,
+    string Version);

@@ -1,3 +1,4 @@
+using Tourbooking.Distributed;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
@@ -97,6 +98,7 @@ public class HomeController : Controller
             var model = new PaymentPageViewModel
             {
                 BookingId = booking.BookingId,
+                BookingVersion = Convert.ToBase64String(booking.Version),
                 TourName = booking.Tour?.Name ?? "Tour",
                 TourLocation = booking.Tour?.Location ?? string.Empty,
                 TravelDate = booking.TravelDate,
@@ -118,7 +120,7 @@ public class HomeController : Controller
         [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ConfirmPayment(int bookingId, string? transactionCode)
+        public async Task<IActionResult> ConfirmPayment(int bookingId, string? transactionCode, string? bookingVersion = null)
         {
             var user = await _userManager.GetUserAsync(User);
             if (user == null)
@@ -134,6 +136,8 @@ public class HomeController : Controller
                 TempData["PaymentError"] = "Không tìm thấy booking để xác nhận thanh toán.";
                 return RedirectToAction("Payment", new { bookingId });
             }
+
+            BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
 
             if (string.Equals(booking.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
             {

@@ -224,6 +224,7 @@
                             {
                                 <form asp-action="ConfirmPaymentReceived" asp-route-id="@booking.BookingId" method="post">
                                     @Html.AntiForgeryToken()
+                                    <input type="hidden" name="bookingVersion" value="@booking.Version" />
                                     <input type="hidden" name="filterStatus" value="@Model.SelectedStatus" />
                                     <input type="hidden" name="page" value="@Model.CurrentPage" />
                                     <button type="submit" class="primary-action">Xác nhận đã nhận tiền &amp; cấp vé</button>
@@ -234,6 +235,7 @@
                                 <form asp-action="UpdateBookingStatus" asp-route-id="@booking.BookingId" method="post">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="status" value="Cancelled" />
+                                    <input type="hidden" name="bookingVersion" value="@booking.Version" />
                                     <input type="hidden" name="filterStatus" value="@Model.SelectedStatus" />
                                     <input type="hidden" name="page" value="@Model.CurrentPage" />
                                     <button type="submit" class="ghost-action">Hủy vé</button>

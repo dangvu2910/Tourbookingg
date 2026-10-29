@@ -74,6 +74,53 @@ public class DataIntegrityTests : IDisposable
         Assert.Equal("Confirmed", (await check.Bookings.SingleAsync(x => x.BookingId == booking.BookingId)).Status);
     }
 
+    [Theory]
+    [InlineData("Confirmed")]
+    [InlineData("Cancelled")]
+    [InlineData("PendingConfirmation")]
+    public async Task FormVersionRejectsAStalePageEvenWhenRequestReadsLatestRow(string firstStatus)
+    {
+        await using var seed = Context();
+        var booking = await NewBooking(seed);
+        seed.Bookings.Add(booking);
+        await seed.SaveChangesAsync();
+        var formVersion = Convert.ToBase64String(booking.Version);
+
+        await using (var first = Context())
+        {
+            var changed = await first.Bookings.SingleAsync(b => b.BookingId == booking.BookingId);
+            changed.Status = firstStatus;
+            changed.TravelDate = changed.TravelDate.AddDays(1);
+            await first.SaveChangesAsync();
+        }
+
+        await using var second = Context();
+        var latest = await second.Bookings.SingleAsync(b => b.BookingId == booking.BookingId);
+        var outboxCount = await second.OutboxMessages.CountAsync();
+        Assert.Throws<DbUpdateConcurrencyException>(() => BookingVersionGuard.RequireCurrent(second, latest, formVersion));
+        Assert.Equal(firstStatus, latest.Status);
+        Assert.Equal(outboxCount, await second.OutboxMessages.CountAsync());
+
+        // A user who reloads gets the new version and can submit a new operation.
+        BookingVersionGuard.RequireCurrent(second, latest, Convert.ToBase64String(latest.Version));
+        latest.RescheduleNote = "New request after reload";
+        await second.SaveChangesAsync();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-base64")]
+    [InlineData("AQID")]
+    public async Task FormVersionCannotBeBypassedByOmittingOrCorruptingTheToken(string? token)
+    {
+        await using var db = Context();
+        var booking = await NewBooking(db);
+        db.Bookings.Add(booking);
+        await db.SaveChangesAsync();
+        Assert.Throws<DbUpdateConcurrencyException>(() => BookingVersionGuard.RequireCurrent(db, booking, token));
+    }
+
     [Fact]
     public async Task DuplicateEventsProduceOneNotification()
     {

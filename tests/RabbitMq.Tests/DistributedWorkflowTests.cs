@@ -197,6 +197,7 @@ public class DistributedWorkflowTests
         using var confirmed = await client.PostAsync("/Home/ConfirmPayment", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["bookingId"] = bookingId.ToString(), ["transactionCode"] = "TEST-TRANSFER",
+            ["bookingVersion"] = Field(bookingPage, "bookingVersion"),
             ["__RequestVerificationToken"] = Field(bookingPage, "__RequestVerificationToken")
         }));
         Assert.Equal(HttpStatusCode.Redirect, confirmed.StatusCode);
@@ -219,9 +220,13 @@ public class DistributedWorkflowTests
             Assert.Equal(service, response.Headers.GetValues("X-Service-Name").Single());
         }
         var adminBookings = await admin.GetStringAsync("/Admin/Bookings");
+        var approvalForm = Regex.Matches(adminBookings, "<form\\b[^>]*>[\\s\\S]*?</form>")
+            .Select(match => match.Value)
+            .Single(form => form.Contains($"action=\"/Admin/ConfirmPaymentReceived/{bookingId}\"", StringComparison.Ordinal));
         using var approved = await admin.PostAsync("/Admin/ConfirmPaymentReceived", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["id"] = bookingId.ToString(),
+            ["bookingVersion"] = Field(approvalForm, "bookingVersion"),
             ["__RequestVerificationToken"] = Field(adminBookings, "__RequestVerificationToken")
         }));
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
@@ -230,9 +235,10 @@ public class DistributedWorkflowTests
         using var reSubmitted = await client.PostAsync("/Home/ConfirmPayment", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["bookingId"] = bookingId.ToString(),
+            ["bookingVersion"] = Field(bookingPage, "bookingVersion"),
             ["__RequestVerificationToken"] = Field(bookingPage, "__RequestVerificationToken")
         }));
-        Assert.Equal(HttpStatusCode.Redirect, reSubmitted.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, reSubmitted.StatusCode);
         var stillConfirmed = JsonDocument.Parse(await client.GetStringAsync($"/api/bookings/{bookingId}"));
         Assert.Equal("Confirmed", stillConfirmed.RootElement.GetProperty("status").GetString());
 

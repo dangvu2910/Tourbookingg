@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Tourbooking.Models;
+using Tourbooking.Distributed;
 using Tourbooking.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -212,7 +213,8 @@ public class AccountController : Controller
                     b.CancelReason,
                     CanCustomerReschedule(b, today),
                     CanCustomerCancel(b, today),
-                    minAllowedDateIso)).ToList()
+                    minAllowedDateIso,
+                    Convert.ToBase64String(b.Version))).ToList()
             };
 
             return View(model);
@@ -262,7 +264,7 @@ public class AccountController : Controller
         [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> CancelBooking(int bookingId, string reason)
+        public async Task<IActionResult> CancelBooking(int bookingId, string reason, string? bookingVersion = null)
         {
             var user = await _userManager.GetUserAsync(User);
             if (user == null)
@@ -278,6 +280,8 @@ public class AccountController : Controller
                 TempData["BookingError"] = "Không tìm thấy booking cần hủy.";
                 return RedirectToAction("Bookings");
             }
+
+            BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
 
             if (!CanCustomerCancel(booking, DateTime.Today))
             {
@@ -309,7 +313,7 @@ public class AccountController : Controller
         [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RescheduleBooking(int bookingId, DateTime newTravelDate, string? note)
+        public async Task<IActionResult> RescheduleBooking(int bookingId, DateTime newTravelDate, string? note, string? bookingVersion = null)
         {
             var user = await _userManager.GetUserAsync(User);
             if (user == null)
@@ -325,6 +329,8 @@ public class AccountController : Controller
                 TempData["BookingError"] = "Không tìm thấy booking cần đổi lịch.";
                 return RedirectToAction("Bookings");
             }
+
+            BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
 
             if (!CanCustomerReschedule(booking, DateTime.Today))
             {

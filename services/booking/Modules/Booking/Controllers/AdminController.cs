@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Tourbooking.Models;
+using Tourbooking.Distributed;
 using Tourbooking.ViewModels;
 
 namespace Tourbooking.Controllers;
@@ -143,7 +144,8 @@ public class AdminController : Controller
                 b.TotalPrice.ToString("C0", VnCulture),
                 b.Status,
                 latestPayments.GetValueOrDefault(b.BookingId).Status,
-                latestPayments.GetValueOrDefault(b.BookingId).TransactionCode)).ToList()
+                latestPayments.GetValueOrDefault(b.BookingId).TransactionCode,
+                Convert.ToBase64String(b.Version))).ToList()
         };
 
         return View(model);
@@ -151,7 +153,7 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UpdateBookingStatus(int id, string status, string? filterStatus, int page = 1)
+    public async Task<IActionResult> UpdateBookingStatus(int id, string status, string? filterStatus, int page = 1, string? bookingVersion = null)
     {
         if (string.IsNullOrWhiteSpace(status))
         {
@@ -165,6 +167,8 @@ public class AdminController : Controller
             TempData["BookingAdminError"] = $"Không tìm thấy vé #{id}.";
             return RedirectToBookings(filterStatus, page);
         }
+
+        BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
 
         var normalized = status.Trim();
         if (!normalized.Equals("Cancelled", StringComparison.OrdinalIgnoreCase))
@@ -195,7 +199,7 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ConfirmPaymentReceived(int id, string? filterStatus, int page = 1)
+    public async Task<IActionResult> ConfirmPaymentReceived(int id, string? filterStatus, int page = 1, string? bookingVersion = null)
     {
         var booking = await _context.Bookings.FirstOrDefaultAsync(b => b.BookingId == id);
         if (booking == null)
@@ -203,6 +207,8 @@ public class AdminController : Controller
             TempData["BookingAdminError"] = $"Không tìm thấy vé #{id}.";
             return RedirectToBookings(filterStatus, page);
         }
+
+        BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
 
         if (string.Equals(booking.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
         {

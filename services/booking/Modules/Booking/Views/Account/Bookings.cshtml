@@ -154,7 +154,8 @@
                                             <summary class="btn btn-outline">Đổi lịch</summary>
                                             <form asp-action="RescheduleBooking" method="post" class="booking-action">
                                                 @Html.AntiForgeryToken()
-                                                <input type="hidden" name="bookingId" value="@booking.BookingId" />
+                                                <input type="hidden" name="bookingVersion" value="@booking.Version" />
+                                    <input type="hidden" name="bookingId" value="@booking.BookingId" />
                                                 <label class="booking-action-label">
                                                     Ngày đi mới
                                                     <input class="form-control" type="date" name="newTravelDate" min="@booking.MinAllowedDateIso" required />
@@ -174,7 +175,8 @@
                                             <summary class="btn btn-outline">Hủy</summary>
                                             <form asp-action="CancelBooking" method="post" class="booking-action">
                                                 @Html.AntiForgeryToken()
-                                                <input type="hidden" name="bookingId" value="@booking.BookingId" />
+                                                <input type="hidden" name="bookingVersion" value="@booking.Version" />
+                                    <input type="hidden" name="bookingId" value="@booking.BookingId" />
                                                 <label class="booking-action-label">
                                                     Lý do hủy
                                                     <input class="form-control" type="text" name="reason" maxlength="500" required />

@@ -29,4 +29,5 @@ public record AccountBookingRow(
     string? CancelReason,
     bool CanReschedule,
     bool CanCancel,
-    string MinAllowedDateIso);
+    string MinAllowedDateIso,
+    string Version);

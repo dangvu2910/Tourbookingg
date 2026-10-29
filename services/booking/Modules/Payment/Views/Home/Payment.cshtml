@@ -76,6 +76,7 @@
                                 <form asp-action="ConfirmPayment" method="post" class="payment-grid-single" style="display:grid; gap:10px;">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="bookingId" value="@Model.BookingId" />
+                                    <input type="hidden" name="bookingVersion" value="@Model.BookingVersion" />
                                     <div class="form-grid" style="grid-template-columns: 1fr;">
                                         <label>
                                             <span>Mã giao dịch (tuỳ chọn)</span>

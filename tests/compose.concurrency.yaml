@@ -1,0 +1,55 @@
+name: tourbooking-concurrency-check
+x-env: &env
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_HTTP_PORTS: 8080
+  Database__Directory: /data
+  DataProtection__KeysPath: /keys
+  Https__Redirect: "false"
+  RabbitMQ__Enabled: "false"
+  Services__InternalKey: isolated-concurrency-check-key
+  Service__TrustGateway: "true"
+  Services__identity: http://identity:8080
+  Services__catalog: http://catalog:8080
+  Services__booking: http://booking:8080
+  Services__payment: http://booking:8080
+  Services__reporting: http://booking:8080
+  Services__review: http://customer:8080
+  Services__support: http://customer:8080
+  Services__notification: http://notification:8080
+services:
+  identity:
+    image: tourbooking-distributed-identity:latest
+    environment:
+      <<: *env
+      AdminUser__Email: admin@concurrency.example.test
+      AdminUser__Password: Isolated!Password123
+    volumes: [keys:/keys, identity-data:/data]
+  catalog:
+    image: tourbooking-distributed-catalog:latest
+    environment:
+      <<: *env
+      Database__SeedDemo: "true"
+    volumes: [keys:/keys, catalog-data:/data]
+  booking:
+    image: tourbooking-booking-concurrency-check:latest
+    environment:
+      <<: *env
+      Database__Name: booking
+    volumes: [keys:/keys, booking-data:/data]
+  customer:
+    image: tourbooking-distributed-customer:latest
+    environment:
+      <<: *env
+      Database__Name: customer
+    volumes: [keys:/keys, customer-data:/data]
+  gateway:
+    image: tourbooking-distributed-gateway:latest
+    environment:
+      <<: *env
+    ports: ["127.0.0.1:18081:8080"]
+volumes:
+  keys:
+  identity-data:
+  catalog-data:
+  booking-data:
+  customer-data:

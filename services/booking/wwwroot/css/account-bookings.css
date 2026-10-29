@@ -48,6 +48,8 @@
 .booking-list {
   display: grid;
   gap: 16px;
+  container-type: inline-size;
+  container-name: booking-list;
 }
 
 .booking-item {
@@ -57,13 +59,14 @@
   box-shadow: var(--bookings-shadow);
   padding: 16px 18px;
   display: grid;
-  grid-template-columns: 140px 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: center;
 }
 
 .booking-thumb {
-  width: 140px;
+  width: 100%;
+  max-width: 140px;
   height: 90px;
   border-radius: 14px;
   overflow: hidden;
@@ -82,6 +85,10 @@
 
 .booking-info h4 {
   margin: 0 0 6px;
+  font-size: 18px;
+  line-height: 1.5;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .booking-info p {
@@ -100,7 +107,16 @@
 }
 
 .booking-price {
-  text-align: right;
+  grid-column: 1 / -1;
+  text-align: left;
+  border-top: 1px solid var(--bookings-border);
+  padding-top: 14px;
+}
+
+.booking-info {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .booking-price strong {
@@ -187,5 +203,25 @@
 
   .booking-price {
     text-align: left;
+  }
+}
+
+/* Use the card's available width, which is narrower than the viewport beside the sidebar. */
+@container booking-list (min-width: 480px) {
+  .booking-item {
+    grid-template-columns: 120px minmax(0, 1fr);
+  }
+}
+
+@container booking-list (min-width: 850px) {
+  .booking-item {
+    grid-template-columns: 120px minmax(240px, 1fr) minmax(200px, 260px);
+  }
+
+  .booking-price {
+    grid-column: auto;
+    border-top: 0;
+    padding-top: 0;
+    text-align: right;
   }
 }

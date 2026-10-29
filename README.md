@@ -72,6 +72,26 @@ Chạy integration test trong Docker Compose:
 
 Integration test cần stack đã khởi chạy và dùng cấu hình/tài khoản trong `.env`. Chỉ chạy trên môi trường local hoặc test.
 
+Các form hủy vé, đổi lịch, duyệt và báo chuyển khoản gửi kèm phiên bản booking lúc mở trang. Nếu booking đã thay đổi, request từ trang cũ nhận HTTP 409 và yêu cầu tải lại; không ghi đè thao tác trước đó. Thiếu hoặc sai phiên bản cũng bị từ chối. Lỗi CSRF vẫn trả HTTP 400.
+
+Kiểm thử hai phiên đăng nhập trên stack riêng (cần Node.js 22 trở lên; dữ liệu test dùng volume riêng, cổng `18081`):
+
+```powershell
+docker build -t tourbooking-booking-concurrency-check:latest --build-arg SERVICE=BookingPlatform --build-arg SERVICE_DIR=booking .
+.\scripts\Compose.ps1 -f tests/compose.concurrency.yaml up -d
+$env:TOURBOOKING_ISOLATED_TESTS = '1'
+$env:TOURBOOKING_CONCURRENCY_URL = 'http://localhost:18081'
+$env:TOURBOOKING_TEST_ADMIN_EMAIL = 'admin@concurrency.example.test'
+$env:TOURBOOKING_TEST_ADMIN_PASSWORD = 'Isolated!Password123'
+try {
+    node tests/booking-concurrency.mjs
+    if ($LASTEXITCODE -ne 0) { throw 'Concurrency checks failed.' }
+}
+finally { .\scripts\Compose.ps1 -f tests/compose.concurrency.yaml down -v }
+```
+
+Thông tin đăng nhập trên chỉ dành cho stack test riêng. Script từ chối chạy trên cổng web thông thường `8080`.
+
 ## Backup và khôi phục
 
 Kiểm tra cô lập khi Catalog ngừng hoạt động (stack phải đang chạy):
