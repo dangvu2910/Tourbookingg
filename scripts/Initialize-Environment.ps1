@@ -30,3 +30,27 @@ if (-not (Select-String -LiteralPath $environmentPath -Pattern '^INTERNAL_SERVIC
     $serviceKey = [Convert]::ToBase64String($keyBytes)
     Add-Content -LiteralPath $environmentPath -Value "`nINTERNAL_SERVICE_KEY=$serviceKey" -Encoding utf8
 }
+
+# Hex passwords are URI-safe for MongoDB and cannot contain SQLCMD metacharacters.
+if (-not (Select-String -LiteralPath $environmentPath -Pattern '^API_JWT_SIGNING_KEY=.+' -Quiet)) {
+    $jwtBytes=New-Object byte[] 48
+    $jwtGenerator=[Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $jwtGenerator.GetBytes($jwtBytes) } finally { $jwtGenerator.Dispose() }
+    Add-Content -LiteralPath $environmentPath -Value ('API_JWT_SIGNING_KEY='+[Convert]::ToBase64String($jwtBytes)) -Encoding utf8
+}
+
+foreach ($name in @('IDENTITY_SQL_PASSWORD', 'CATALOG_SQL_PASSWORD', 'BOOKING_SQL_PASSWORD',
+    'CUSTOMER_SQL_PASSWORD', 'MONGO_ROOT_PASSWORD', 'MONGO_CHAT_PASSWORD', 'MONGO_NOTIFICATION_PASSWORD')) {
+    if (-not (Select-String -LiteralPath $environmentPath -Pattern "^$name=.+" -Quiet)) {
+        $randomBytes = New-Object byte[] 24
+        $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
+        try { $generator.GetBytes($randomBytes) } finally { $generator.Dispose() }
+        $password = 'Tb9' + ([BitConverter]::ToString($randomBytes)).Replace('-', '')
+        Add-Content -LiteralPath $environmentPath -Value "$name=$password" -Encoding utf8
+    }
+}
+
+# A separate administrator credential for the new stack preserves legacy credentials.
+if (-not (Select-String -LiteralPath $environmentPath -Pattern '^HYBRID_ADMIN_PASSWORD=.+' -Quiet)) {
+    Add-Content -LiteralPath $environmentPath -Value ('HYBRID_ADMIN_PASSWORD=' + (New-Password)) -Encoding utf8
+}

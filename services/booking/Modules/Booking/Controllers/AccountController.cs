@@ -1,58 +1,35 @@
+using System.Security.Claims;
 using System;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Tourbooking.Models;
 using Tourbooking.Distributed;
 using Tourbooking.ViewModels;
 using Microsoft.EntityFrameworkCore;
+using Tourbooking.Contracts;
 
 namespace Tourbooking.Controllers;
 
 public class AccountController : Controller
 {
 
-        private readonly SignInManager<ApplicationUser> _signInManager;
-        private readonly UserManager<ApplicationUser> _userManager;
         private readonly IConfiguration _configuration;
         private readonly ApplicationDbContext _context;
         private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly ISeatReservationClient _reservations;
 
         public AccountController(
-            SignInManager<ApplicationUser> signInManager,
-            UserManager<ApplicationUser> userManager,
             IConfiguration configuration,
             ApplicationDbContext context,
-            IWebHostEnvironment webHostEnvironment)
+            IWebHostEnvironment webHostEnvironment, ISeatReservationClient reservations)
         {
-            _signInManager = signInManager;
-            _userManager = userManager;
             _configuration = configuration;
             _context = context;
             _webHostEnvironment = webHostEnvironment;
+            _reservations = reservations;
         }
 
-        private static bool CanCustomerCancel(Booking booking, DateTime today)
-        {
-            if (string.Equals(booking.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (booking.TravelDate.Date < today)
-            {
-                return false;
-            }
-
-            if (string.Equals(booking.Status, "Confirmed", StringComparison.OrdinalIgnoreCase))
-            {
-                return booking.TravelDate.Date >= today.AddDays(1);
-            }
-
-            return true;
-        }
-
-        private static bool CanCustomerReschedule(Booking booking, DateTime today)
+        private static bool CanCustomerChangeBooking(Booking booking, DateTime today)
         {
             if (string.Equals(booking.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
             {
@@ -145,8 +122,8 @@ public class AccountController : Controller
         [Authorize]
         public async Task<IActionResult> Bookings(string? tab)
         {
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
                 return RedirectToAction("Login");
             }
@@ -159,7 +136,7 @@ public class AccountController : Controller
 
             var bookings = await _context.Bookings
                 .Include(b => b.Tour)
-                .Where(b => b.UserId == user.Id)
+                .Where(b => b.UserId == userId)
                 .OrderByDescending(b => b.CreatedAt)
                 .ToListAsync();
 
@@ -196,12 +173,12 @@ public class AccountController : Controller
                 CancelledBookings = bookings.Count(b => string.Equals(b.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)),
                 Bookings = filteredBookings.Select(b => new AccountBookingRow(
                     b.BookingId,
-                    b.Tour?.Name ?? "Tour",
-                    b.Tour?.Location ?? string.Empty,
+                    b.TourNameSnapshot ?? b.Tour?.Name ?? "Tour",
+                    b.TourLocationSnapshot ?? b.Tour?.Location ?? string.Empty,
                     ResolveTourImageUrl(b.Tour?.ImageUrl, b.Tour?.Location, b.Tour?.Name),
                     b.TravelDate,
-                    b.Tour?.DepartureTime ?? new TimeOnly(8, 0),
-                    b.Tour?.ReturnTime ?? new TimeOnly(18, 0),
+                    b.DepartureTimeSnapshot ?? b.Tour?.DepartureTime ?? new TimeOnly(8, 0),
+                    b.ReturnTimeSnapshot ?? b.Tour?.ReturnTime ?? new TimeOnly(18, 0),
                     b.OriginalTravelDate,
                     b.RescheduledAt,
                     b.RescheduleNote,
@@ -211,8 +188,8 @@ public class AccountController : Controller
                     latestPaymentStatus.GetValueOrDefault(b.BookingId),
                     b.CancelledAt,
                     b.CancelReason,
-                    CanCustomerReschedule(b, today),
-                    CanCustomerCancel(b, today),
+                    CanCustomerChangeBooking(b, today),
+                    CanCustomerChangeBooking(b, today),
                     minAllowedDateIso,
                     Convert.ToBase64String(b.Version))).ToList()
             };
@@ -223,14 +200,14 @@ public class AccountController : Controller
         [Authorize]
         public async Task<IActionResult> Ticket(int bookingId)
         {
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
                 return RedirectToAction("Login");
 
             var booking = await _context.Bookings
                 .AsNoTracking()
                 .Include(b => b.Tour)
-                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == user.Id);
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == userId);
             if (booking == null)
                 return NotFound();
 
@@ -252,11 +229,11 @@ public class AccountController : Controller
                 BookingId = booking.BookingId,
                 CustomerName = booking.FullName,
                 CustomerPhone = booking.PhoneNumber,
-                TourName = booking.Tour?.Name ?? "Tour",
-                TourLocation = booking.Tour?.Location ?? string.Empty,
+                TourName = booking.TourNameSnapshot ?? booking.Tour?.Name ?? "Tour",
+                TourLocation = booking.TourLocationSnapshot ?? booking.Tour?.Location ?? string.Empty,
                 TravelDate = booking.TravelDate,
-                DepartureTime = booking.Tour?.DepartureTime ?? new TimeOnly(8, 0),
-                ReturnTime = booking.Tour?.ReturnTime ?? new TimeOnly(18, 0),
+                DepartureTime = booking.DepartureTimeSnapshot ?? booking.Tour?.DepartureTime ?? new TimeOnly(8, 0),
+                ReturnTime = booking.ReturnTimeSnapshot ?? booking.Tour?.ReturnTime ?? new TimeOnly(18, 0),
                 GuestCount = booking.GuestCount
             });
         }
@@ -266,14 +243,14 @@ public class AccountController : Controller
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CancelBooking(int bookingId, string reason, string? bookingVersion = null)
         {
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
                 return RedirectToAction("Login");
             }
 
             var booking = await _context.Bookings
-                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == user.Id);
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == userId);
 
             if (booking == null)
             {
@@ -283,7 +260,7 @@ public class AccountController : Controller
 
             BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
 
-            if (!CanCustomerCancel(booking, DateTime.Today))
+            if (!CanCustomerChangeBooking(booking, DateTime.Today))
             {
                 TempData["BookingError"] = "Booking này không thể hủy (đã quá ngày đi hoặc đã bị hủy).";
                 return RedirectToAction("Bookings");
@@ -295,6 +272,12 @@ public class AccountController : Controller
                 return RedirectToAction("Bookings");
             }
 
+            if (reason.Trim().Length > 500)
+            {
+                TempData["BookingError"] = "Lý do hủy tối đa 500 ký tự.";
+                return RedirectToAction("Bookings");
+            }
+
             booking.Status = "Cancelled";
             booking.CancelledAt = DateTime.UtcNow;
             booking.CancelReason = reason.Trim();
@@ -303,7 +286,7 @@ public class AccountController : Controller
                 .OrderByDescending(p => p.CreatedAt)
                 .FirstOrDefaultAsync();
             if (payment != null)
-                payment.Status = payment.Status == "Paid" ? "RefundPending" : "Cancelled";
+                payment.Cancel();
 
             await _context.SaveChangesAsync();
             TempData["BookingSuccess"] = "Đã hủy booking của bạn.";
@@ -315,14 +298,14 @@ public class AccountController : Controller
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RescheduleBooking(int bookingId, DateTime newTravelDate, string? note, string? bookingVersion = null)
         {
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
                 return RedirectToAction("Login");
             }
 
             var booking = await _context.Bookings
-                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == user.Id);
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == userId);
 
             if (booking == null)
             {
@@ -332,7 +315,7 @@ public class AccountController : Controller
 
             BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
 
-            if (!CanCustomerReschedule(booking, DateTime.Today))
+            if (!CanCustomerChangeBooking(booking, DateTime.Today))
             {
                 TempData["BookingError"] = "Booking này không thể đổi lịch (đã quá ngày đi hoặc đã bị hủy).";
                 return RedirectToAction("Bookings");
@@ -351,6 +334,27 @@ public class AccountController : Controller
                 return RedirectToAction("Bookings");
             }
 
+            if (note?.Trim().Length > 500)
+            {
+                TempData["BookingError"] = "Ghi chú đổi lịch tối đa 500 ký tự.";
+                return RedirectToAction("Bookings");
+            }
+
+            if (_configuration.GetValue("Reservations:Enabled", false))
+            {
+                if (booking.SeatReservationToRelease != null) return Conflict("Đang xử lý lần đổi lịch trước. Vui lòng thử lại sau.");
+                try
+                {
+                    var reservation = await _reservations.ReserveAsync(new(Guid.NewGuid(), booking.TourId, userId, normalizedDate, booking.GuestCount), HttpContext.RequestAborted);
+                    booking.SeatReservationToRelease = booking.SeatReservationId;
+                    booking.SeatPreviousTravelDate = booking.TravelDate;
+                    booking.SeatReservationId = reservation.ReservationId;
+                    booking.SeatReservationState = reservation.Status;
+                }
+                catch (ReservationException ex) { return Conflict(ex.Message); }
+                catch (HttpRequestException) { return StatusCode(503); }
+                catch (TaskCanceledException) when (!HttpContext.RequestAborted.IsCancellationRequested) { return StatusCode(504); }
+            }
             booking.OriginalTravelDate ??= booking.TravelDate;
             booking.TravelDate = normalizedDate;
             booking.RescheduledAt = DateTime.UtcNow;

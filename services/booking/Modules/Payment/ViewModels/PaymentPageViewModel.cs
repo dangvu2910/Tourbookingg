@@ -3,7 +3,6 @@ namespace Tourbooking.ViewModels;
 public class PaymentPageViewModel
 {
     public int BookingId { get; set; }
-    public string BookingVersion { get; set; } = string.Empty;
     public string TourName { get; set; } = string.Empty;
     public string TourLocation { get; set; } = string.Empty;
     public DateTime TravelDate { get; set; }

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
@@ -5,6 +6,7 @@ using Tourbooking.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Tourbooking.ViewModels;
+using Tourbooking.Contracts;
 
 namespace Tourbooking.Controllers;
 
@@ -14,12 +16,14 @@ public class HomeController : Controller
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IConfiguration _configuration;
+        private readonly ISeatReservationClient _reservations;
 
-        public HomeController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, IConfiguration configuration)
+        public HomeController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, IConfiguration configuration, ISeatReservationClient reservations)
         {
             _context = context;
             _userManager = userManager;
             _configuration = configuration;
+            _reservations = reservations;
         }
 
         private static string? NormalizeImageUrl(string? imageUrl)
@@ -100,8 +104,8 @@ public class HomeController : Controller
                 return RedirectToAction("Index", "Tours");
             }
 
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
                 return RedirectToAction("Login", "Account");
             }
@@ -112,7 +116,7 @@ public class HomeController : Controller
             var existing = await _context.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.RequestId == model.RequestId);
             if (existing != null)
             {
-                if (existing.UserId != user.Id) return Conflict();
+                if (!MatchesRequest(existing, model, userId)) return Conflict();
                 return RedirectToAction("Payment", new { bookingId = existing.BookingId });
             }
 
@@ -127,14 +131,28 @@ public class HomeController : Controller
 
             const decimal serviceFee = 45000m;
             const decimal localTax = 120000m;
-            var total = (tour.Price * model.GuestCount) + serviceFee + localTax;
+            ReservedSeats? reserved = null;
+            if (_configuration.GetValue("Reservations:Enabled", false))
+            {
+                try { reserved = await _reservations.ReserveAsync(new(model.RequestId, tour.TourId, userId, model.TravelDate!.Value, model.GuestCount), HttpContext.RequestAborted); }
+                catch (ReservationException ex) { return Conflict(ex.Message); }
+                catch (HttpRequestException) { return StatusCode(503, "Catalog tạm thời không thể giữ chỗ. Vui lòng thử lại với cùng yêu cầu."); }
+                catch (TaskCanceledException) when (!HttpContext.RequestAborted.IsCancellationRequested) { return StatusCode(504); }
+            }
+            var total = ((reserved?.UnitPrice ?? tour.Price) * model.GuestCount) + serviceFee + localTax;
             var paymentStatus = "PendingConfirmation";
 
             var booking = new Booking
             {
                 RequestId = model.RequestId,
+                SeatReservationId = reserved?.ReservationId,
+                SeatReservationState = reserved?.Status,
                 TourId = tour.TourId,
-                UserId = user.Id,
+                UserId = userId,
+                TourNameSnapshot = reserved?.TourName ?? tour.Name,
+                TourLocationSnapshot = reserved?.TourLocation ?? tour.Location,
+                DepartureTimeSnapshot = reserved?.DepartureTime ?? tour.DepartureTime,
+                ReturnTimeSnapshot = reserved?.ReturnTime ?? tour.ReturnTime,
                 FullName = model.FullName.Trim(),
                 Email = model.Email.Trim(),
                 PhoneNumber = model.PhoneNumber.Trim(),
@@ -152,7 +170,7 @@ public class HomeController : Controller
                 _context.Payments.Add(new Payment
                 {
                     BookingId = booking.BookingId,
-                    UserId = user.Id,
+                    UserId = userId,
                     Amount = total,
                     Method = "BankTransfer",
                     Status = "PendingConfirmation",
@@ -164,12 +182,14 @@ public class HomeController : Controller
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
             }
-            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 })
+            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 }
+                or Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
             {
                 await transaction.RollbackAsync();
                 _context.ChangeTracker.Clear();
-                var duplicate = await _context.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.RequestId == model.RequestId && b.UserId == user.Id);
+                var duplicate = await _context.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.RequestId == model.RequestId && b.UserId == userId);
                 if (duplicate == null) throw;
+                if (!MatchesRequest(duplicate, model, userId)) return Conflict();
                 return RedirectToAction("Payment", new { bookingId = duplicate.BookingId });
             }
 
@@ -177,4 +197,9 @@ public class HomeController : Controller
             return RedirectToAction("Payment", new { bookingId = booking.BookingId });
         }
 
+        private static bool MatchesRequest(Booking booking, BookingCreateViewModel model, string userId) =>
+            booking.UserId == userId && booking.TourId == model.TourId
+            && booking.GuestCount == model.GuestCount && booking.TravelDate.Date == model.TravelDate?.Date
+            && booking.FullName == model.FullName?.Trim() && booking.Email == model.Email?.Trim()
+            && booking.PhoneNumber == model.PhoneNumber?.Trim();
 }

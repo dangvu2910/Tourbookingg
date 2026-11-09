@@ -31,7 +31,7 @@ public static class ServiceBoundary
         ["Home/Contact"] = "support", ["Home/ContactDetails"] = "support", ["Home/PostReply"] = "support", ["Home/ContactMessages"] = "support",
         ["Admin/Users"] = "identity", ["Admin/EditUser"] = "identity", ["Admin/DeleteUser"] = "identity", ["Admin/CreateUser"] = "identity",
         ["Admin/Tours"] = "catalog", ["Admin/Contacts"] = "support", ["Admin/ReplyContact"] = "support",
-        ["Admin/Dashboard"] = "reporting", ["Admin/ExportUsers"] = "reporting",
+        ["Admin/Dashboard"] = "reporting", ["Admin/ExportUsers"] = "identity",
         ["Admin/ExportToursExcel"] = "reporting", ["Admin/ExportBookingsExcel"] = "reporting"
     };
 
@@ -41,6 +41,7 @@ public static class ServiceBoundary
         "catalogapi" => "catalog",
         "bookingapi" or "notifications" => "booking",
         "identityapi" => "identity",
+        "chatapi" => "support",
         "account" => "identity",
         "admin" => "booking",
         _ => "catalog"

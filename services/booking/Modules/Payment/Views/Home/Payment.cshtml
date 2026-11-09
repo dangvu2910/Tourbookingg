@@ -18,7 +18,7 @@
         else if (string.Equals(Model.PaymentStatus, "Processing", StringComparison.OrdinalIgnoreCase))
         {
             <h1>Đang chờ xác nhận thanh toán</h1>
-            <p>Yêu cầu xác nhận chuyển khoản của booking #@Model.BookingId đã được gửi. Bạn vẫn có thể xem lại thông tin chuyển khoản bên dưới.</p>
+            <p>Yêu cầu xác nhận chuyển khoản của booking #@Model.BookingId đã được gửi. Bạn không cần chuyển khoản lại.</p>
         }
         else
         {
@@ -50,7 +50,8 @@
                     <h3>Số tiền</h3>
                     <p style="margin: 6px 0 0; font-weight: 700; font-size: 20px;">@Model.Amount.ToString("C0", vnd)</p>
 
-                    @if (!string.Equals(Model.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+                    @if (!string.Equals(Model.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(Model.PaymentStatus, "Processing", StringComparison.OrdinalIgnoreCase))
                     {
                         <div class="payment-details is-active" style="margin-top: 16px;">
                             <div class="payment-detail-title">QR chuyển khoản</div>
@@ -59,7 +60,14 @@
                                     <span>Quét QR @Model.BankCode</span>
                                     <span class="bank-qr-amount">@Model.Amount.ToString("C0", vnd)</span>
                                 </div>
-                                <img src="@Model.QrImageUrl" alt="QR thanh toán" />
+                                @if (!string.IsNullOrWhiteSpace(Model.QrImageUrl))
+                                {
+                                    <img src="@Model.QrImageUrl" alt="QR thanh toán" />
+                                }
+                                else
+                                {
+                                    <p class="text-danger">Chưa có thông tin tài khoản nhận tiền. Vui lòng liên hệ hỗ trợ trước khi chuyển khoản.</p>
+                                }
                                 <p class="bank-qr-note">Nội dung: @Model.AddInfo</p>
                                 <p class="bank-qr-note">Tài khoản nhận: @Model.AccountNumber (@Model.AccountName)</p>
                             </div>
@@ -67,26 +75,22 @@
                             <p class="payment-note">Sau khi thanh toán, booking sẽ ở trạng thái chờ xác nhận.</p>
                         </div>
 
-                        @if (!string.Equals(Model.PaymentStatus, "Processing", StringComparison.OrdinalIgnoreCase))
-                        {
-                            <div class="payment-details" style="margin-top: 16px;">
-                                <div class="payment-detail-title">Xác nhận thanh toán</div>
-                                <p class="payment-note">Sau khi bạn chuyển khoản xong, hãy bấm xác nhận để admin kiểm tra nhanh hơn.</p>
+                        <div class="payment-details" style="margin-top: 16px;">
+                            <div class="payment-detail-title">Xác nhận thanh toán</div>
+                            <p class="payment-note">Sau khi bạn chuyển khoản xong, hãy bấm xác nhận để admin kiểm tra nhanh hơn.</p>
 
-                                <form asp-action="ConfirmPayment" method="post" class="payment-grid-single" style="display:grid; gap:10px;">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="bookingId" value="@Model.BookingId" />
-                                    <input type="hidden" name="bookingVersion" value="@Model.BookingVersion" />
-                                    <div class="form-grid" style="grid-template-columns: 1fr;">
-                                        <label>
-                                            <span>Mã giao dịch (tuỳ chọn)</span>
-                                            <input name="transactionCode" type="text" maxlength="80" placeholder="Nhập mã giao dịch nếu có" />
-                                        </label>
-                                    </div>
-                                    <button type="submit" class="confirm-button">Xác nhận thanh toán</button>
-                                </form>
-                            </div>
-                        }
+                            <form asp-action="ConfirmPayment" method="post" class="payment-grid-single" style="display:grid; gap:10px;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="bookingId" value="@Model.BookingId" />
+                                <div class="form-grid" style="grid-template-columns: 1fr;">
+                                    <label>
+                                        <span>Mã giao dịch (tuỳ chọn)</span>
+                                        <input name="transactionCode" type="text" maxlength="80" placeholder="Nhập mã giao dịch nếu có" />
+                                    </label>
+                                </div>
+                                <button type="submit" class="confirm-button">Xác nhận thanh toán</button>
+                            </form>
+                        </div>
                     }
                 </div>
             </div>

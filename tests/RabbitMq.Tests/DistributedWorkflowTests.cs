@@ -33,7 +33,7 @@ public class DistributedWorkflowTests
         return email;
     }
 
-    [Fact]
+    [ExternalServiceFact]
     public async Task InternalDataIsNotExposedThroughGateway()
     {
         using var client = NewClient();
@@ -41,7 +41,7 @@ public class DistributedWorkflowTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Fact]
+    [ExternalServiceFact(requiresAdmin: true)]
     public async Task SupportReplyNotifiesTicketOwnerAsynchronously()
     {
         using var customer = NewClient();
@@ -83,7 +83,7 @@ public class DistributedWorkflowTests
         Assert.Fail("Support reply was not delivered to the ticket owner within 30 seconds.");
     }
 
-    [Fact]
+    [ExternalServiceFact]
     public async Task GatewayRoutesByServiceAndProtectsPrivateApis()
     {
         using var client = NewClient();
@@ -115,7 +115,7 @@ public class DistributedWorkflowTests
         Assert.Equal(HttpStatusCode.OK, tours.StatusCode);
     }
 
-    [Fact]
+    [ExternalServiceFact]
     public async Task GroupedServicesExposeTheirModulesThroughLogicalRoutes()
     {
         using var client = NewClient();
@@ -123,7 +123,7 @@ public class DistributedWorkflowTests
         {
             ("/Home/Payment?bookingId=1", "booking"), ("/Account/Reviews", "customer"),
             ("/Admin/Contacts", "customer"), ("/Admin/Dashboard", "booking"),
-            ("/Admin/ExportUsers", "booking"), ("/Admin/ExportToursExcel", "booking"),
+            ("/Admin/ExportUsers", "identity"), ("/Admin/ExportToursExcel", "booking"),
             ("/Admin/ExportBookingsExcel", "booking")
         })
         {
@@ -158,7 +158,7 @@ public class DistributedWorkflowTests
         Assert.Equal("booking", adminStylesheet.Headers.GetValues("X-Service-Name").Single());
     }
 
-    [Fact]
+    [ExternalServiceFact(requiresAdmin: true)]
     public async Task BookingRoundTripSharesAuthenticationIsIdempotentAndNotifies()
     {
         using var client = NewClient();
@@ -197,7 +197,6 @@ public class DistributedWorkflowTests
         using var confirmed = await client.PostAsync("/Home/ConfirmPayment", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["bookingId"] = bookingId.ToString(), ["transactionCode"] = "TEST-TRANSFER",
-            ["bookingVersion"] = Field(bookingPage, "bookingVersion"),
             ["__RequestVerificationToken"] = Field(bookingPage, "__RequestVerificationToken")
         }));
         Assert.Equal(HttpStatusCode.Redirect, confirmed.StatusCode);
@@ -235,10 +234,9 @@ public class DistributedWorkflowTests
         using var reSubmitted = await client.PostAsync("/Home/ConfirmPayment", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["bookingId"] = bookingId.ToString(),
-            ["bookingVersion"] = Field(bookingPage, "bookingVersion"),
             ["__RequestVerificationToken"] = Field(bookingPage, "__RequestVerificationToken")
         }));
-        Assert.Equal(HttpStatusCode.Conflict, reSubmitted.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, reSubmitted.StatusCode);
         var stillConfirmed = JsonDocument.Parse(await client.GetStringAsync($"/api/bookings/{bookingId}"));
         Assert.Equal("Confirmed", stillConfirmed.RootElement.GetProperty("status").GetString());
 
@@ -268,7 +266,7 @@ public class DistributedWorkflowTests
         Assert.Contains("đã được xác nhận", WebUtility.HtmlDecode(notificationsPage));
     }
 
-    [Fact]
+    [ExternalServiceFact]
     public async Task BookingCreatesPaymentDetailsBeforeReturning()
     {
         using var client = NewClient();

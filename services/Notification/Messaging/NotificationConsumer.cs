@@ -28,7 +28,7 @@ public sealed class NotificationConsumer(IServiceScopeFactory scopes, IConfigura
                             ?? throw new JsonException("Empty event");
                         if (evt.EventId == Guid.Empty || string.IsNullOrWhiteSpace(evt.Type)) throw new JsonException("Invalid event envelope");
                         using var scope = scopes.CreateScope();
-                        var db = scope.ServiceProvider.GetRequiredService<NotificationDb>();
+                        var db = scope.ServiceProvider.GetRequiredService<INotificationStore>();
                         await db.StoreAsync(evt, stoppingToken);
                         await channel.BasicAckAsync(delivery.DeliveryTag, false, stoppingToken);
                         logger.LogInformation("Handled {EventType} {EventId} trace={CorrelationId}", evt.Type, evt.EventId, evt.CorrelationId);

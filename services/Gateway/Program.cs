@@ -42,6 +42,9 @@ Route("identity-api", "/api/identity/{**rest}", "identity");
 Route("booking-api", "/api/bookings/{**rest}", "booking");
 Route("notification-api", "/api/notifications/{**rest}", "notification");
 Route("catalog-api", "/api/tours/{**rest}", "catalog");
+foreach (var (prefix, owner) in new[] { ("auth", "identity"), ("catalog", "catalog"),
+    ("bookings", "booking"), ("chat", "support"), ("notifications", "notification") })
+    Route("v1-" + prefix, "/api/v1/" + prefix + "/{**rest}", owner);
 Route("fallback", "/{**rest}", "catalog", 100);
 var clusters = ServiceBoundary.Services.Select((service, index) => new ClusterConfig
 {
@@ -61,6 +64,7 @@ builder.Services.AddHttpClient();
 var app = builder.Build();
 app.Use(async (context, next) =>
 {
+    context.Response.Headers["X-Service-Node"] = Environment.MachineName;
     if (context.Request.Path.StartsWithSegments("/internal")) { context.Response.StatusCode = 404; return; }
     context.Request.Headers.Remove("X-Service-Key");
     if (context.Request.Path.Equals("/Home/Index", StringComparison.OrdinalIgnoreCase))

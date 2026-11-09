@@ -49,4 +49,17 @@ public class Payment
 
     public Booking? Booking { get; set; }
     public ApplicationUser? User { get; set; }
+
+    public bool HasTransferAcknowledgement() => Status is "Processing" or "Paid";
+
+    public void Cancel()
+    {
+        // Repeated cancellation must retain an outstanding refund obligation.
+        Status = Status switch
+        {
+            "Paid" or "RefundPending" => "RefundPending",
+            "Refunded" => "Refunded",
+            _ => "Cancelled"
+        };
+    }
 }

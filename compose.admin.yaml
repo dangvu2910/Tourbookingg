@@ -1,0 +1,10 @@
+# Optional local administration only. Keep the base stack private by default.
+services:
+  sqlserver:
+    ports: ["127.0.0.1:14333:1433"]
+  mongodb:
+    ports: ["127.0.0.1:27018:27017"]
+  rabbitmq:
+    ports:
+      - "127.0.0.1:15672:15672"
+      - "127.0.0.1:5672:5672"

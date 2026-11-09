@@ -13,7 +13,7 @@ public static class ServiceData
 
     public static string Owner(string table) => table switch
     {
-        "Tours" => "catalog",
+        "Tours" or "SeatReservations" => "catalog",
         "Bookings" => "booking",
         "Payments" => "payment",
         "TourReviews" or "TourReviewVotes" => "review",
@@ -22,11 +22,18 @@ public static class ServiceData
         _ => ""
     };
 
-    public static bool IsOwned(string service, IEntityType entity) =>
+    public static bool IsOwned(string service, IReadOnlyEntityType entity) =>
         service == "standalone" || OwnedServices(service).Contains(Owner(entity.GetTableName()!));
 
     public static bool Needs(string service, string owner) =>
         OwnedServices(service).Any(serviceOwner => NeedsSingle(serviceOwner, owner));
+
+    // Keep owner tables intact. Replicas only contain data actually shared by their owner.
+    public static bool RequiresTable(string service, string table) =>
+        service == "standalone" || Owner(table) == "" || OwnedServices(service).Contains(Owner(table)) ||
+        (Needs(service, Owner(table)) && table != "SeatReservations" &&
+            table is not ("AspNetRoles" or "AspNetUserRoles") && table is not
+            ("AspNetUserTokens" or "AspNetUserLogins" or "AspNetUserClaims" or "AspNetRoleClaims"));
 
     private static bool NeedsSingle(string service, string owner) => service != owner && owner switch
     {
@@ -34,7 +41,7 @@ public static class ServiceData
         "catalog" => service is "booking" or "payment" or "review" or "reporting",
         "booking" => service is "catalog" or "payment" or "review" or "reporting",
         "payment" => service is "booking" or "reporting",
-        "review" => service is "catalog" or "reporting",
+        "review" => service is "catalog",
         _ => false
     };
 }

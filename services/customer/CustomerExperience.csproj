@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <DefaultItemExcludes>$(DefaultItemExcludes);Modules/**/*</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Modules/**/*;Chat/**/*</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="Modules/Review/Review.csproj" AdditionalProperties="IsConsolidatedHost=true" />

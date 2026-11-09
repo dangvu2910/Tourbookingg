@@ -3,8 +3,13 @@ using Tourbooking.Distributed;
 
 namespace Tourbooking.Notifications;
 
-public sealed class NotificationDb(DbContextOptions<NotificationDb> options) : DbContext(options)
+public sealed class NotificationDb(DbContextOptions<NotificationDb> options) : DbContext(options), INotificationStore
 {
+    public async Task InitializeAsync(CancellationToken ct = default) => await Database.EnsureCreatedAsync(ct);
+    public Task<bool> IsReadyAsync(CancellationToken ct = default) => Database.CanConnectAsync(ct);
+    public Task<List<NotificationRecord>> ListAsync(string? userId, bool admin, CancellationToken ct) =>
+        Notifications.AsNoTracking().Where(n => admin || n.UserId == userId)
+            .OrderByDescending(n => n.CreatedAt).ThenByDescending(n => n.EventId).Take(admin ? 200 : 100).ToListAsync(ct);
     public DbSet<NotificationRecord> Notifications => Set<NotificationRecord>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -30,7 +35,7 @@ public sealed class NotificationDb(DbContextOptions<NotificationDb> options) : D
         }
     }
 
-    private static string FormatMessage(IntegrationEvent evt) => (evt.Type, evt.Status) switch
+    public static string FormatMessage(IntegrationEvent evt) => (evt.Type, evt.Status) switch
     {
         ("booking.created", _) => $"Đã nhận đặt tour #{evt.ResourceId}. Đơn đang chờ admin xác nhận.",
         ("booking.updated", "Confirmed") => $"Đặt tour #{evt.ResourceId} đã được xác nhận.",

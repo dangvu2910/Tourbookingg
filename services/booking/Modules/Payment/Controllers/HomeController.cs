@@ -1,10 +1,10 @@
+using System.Security.Claims;
 using Tourbooking.Distributed;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Diagnostics;
+using System.Globalization;
 using Tourbooking.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
 using Tourbooking.ViewModels;
 
 namespace Tourbooking.Controllers;
@@ -13,20 +13,19 @@ public class HomeController : Controller
 {
 
         private readonly ApplicationDbContext _context;
-        private readonly UserManager<ApplicationUser> _userManager;
         private readonly IConfiguration _configuration;
 
-        public HomeController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, IConfiguration configuration)
+        public HomeController(ApplicationDbContext context, IConfiguration configuration)
         {
             _context = context;
-            _userManager = userManager;
             _configuration = configuration;
         }
 
+        [Authorize]
         public async Task<IActionResult> Payment(int bookingId)
         {
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
                 return RedirectToAction("Login", "Account");
             }
@@ -34,7 +33,7 @@ public class HomeController : Controller
             var booking = await _context.Bookings
                 .AsNoTracking()
                 .Include(b => b.Tour)
-                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == user.Id);
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == userId);
 
             if (booking == null)
             {
@@ -46,6 +45,7 @@ public class HomeController : Controller
                 .AsNoTracking()
                 .Where(p => p.BookingId == bookingId)
                 .OrderByDescending(p => p.CreatedAt)
+                .ThenByDescending(p => p.PaymentId)
                 .FirstOrDefaultAsync();
 
             if (payment == null)
@@ -53,9 +53,9 @@ public class HomeController : Controller
                 return View("PaymentPending", bookingId);
             }
 
-            if (string.Equals(booking.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            if (!CanAcknowledgeTransfer(booking, payment))
             {
-                TempData["PaymentError"] = "Booking đã bị hủy; vui lòng liên hệ hỗ trợ nếu bạn đã chuyển khoản.";
+                TempData["BookingError"] = "Booking hoặc thanh toán không còn hiệu lực. Nếu đã chuyển khoản, hãy liên hệ hỗ trợ để đối soát; không chuyển khoản lại.";
                 return RedirectToAction("Bookings", "Account");
             }
 
@@ -77,12 +77,12 @@ public class HomeController : Controller
                 addInfo = $"VOY-{booking.BookingId}";
             }
 
-            var amount = (int)Math.Max(0m, decimal.Round(payment.Amount, 0));
+            var amount = Math.Max(0m, decimal.Round(payment.Amount, 0)).ToString("0", CultureInfo.InvariantCulture);
             var qrUrl = string.Empty;
 
             if (!string.IsNullOrWhiteSpace(bankCode) && !string.IsNullOrWhiteSpace(accountNumber))
             {
-                qrUrl = $"https://api.vietqr.io/image/{bankCode}-{accountNumber}-compact2.png?amount={amount}";
+                qrUrl = $"https://api.vietqr.io/image/{Uri.EscapeDataString(bankCode)}-{Uri.EscapeDataString(accountNumber)}-compact2.png?amount={amount}";
 
                 if (!string.IsNullOrWhiteSpace(addInfo))
                 {
@@ -98,9 +98,8 @@ public class HomeController : Controller
             var model = new PaymentPageViewModel
             {
                 BookingId = booking.BookingId,
-                BookingVersion = Convert.ToBase64String(booking.Version),
-                TourName = booking.Tour?.Name ?? "Tour",
-                TourLocation = booking.Tour?.Location ?? string.Empty,
+                TourName = booking.TourNameSnapshot ?? booking.Tour?.Name ?? "Tour",
+                TourLocation = booking.TourLocationSnapshot ?? booking.Tour?.Location ?? string.Empty,
                 TravelDate = booking.TravelDate,
                 GuestCount = booking.GuestCount,
                 Amount = payment.Amount,
@@ -111,7 +110,7 @@ public class HomeController : Controller
                 AccountNumber = accountNumber,
                 AccountName = accountName,
                 AddInfo = addInfo,
-                QrImageUrl = string.IsNullOrWhiteSpace(qrUrl) ? Url.Content("~/images/qrthanhtoan.jpg") : qrUrl
+                QrImageUrl = qrUrl
             };
 
             return View(model);
@@ -122,58 +121,83 @@ public class HomeController : Controller
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ConfirmPayment(int bookingId, string? transactionCode, string? bookingVersion = null)
         {
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
             {
                 return RedirectToAction("Login", "Account");
             }
 
             var booking = await _context.Bookings
-                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == user.Id);
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.UserId == userId);
 
             if (booking == null)
             {
-                TempData["PaymentError"] = "Không tìm thấy booking để xác nhận thanh toán.";
-                return RedirectToAction("Payment", new { bookingId });
+                return BookingError("Không tìm thấy booking để xác nhận thanh toán.");
             }
 
-            BookingVersionGuard.RequireCurrent(_context, booking, bookingVersion);
-
-            if (string.Equals(booking.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            // Reservation reconciliation can change Version while the QR page is open.
+            // A transfer acknowledgement must evaluate current state instead of the form version.
+            for (var attempt = 0; attempt < 3; attempt++)
             {
-                TempData["PaymentError"] = "Booking đã bị hủy, không thể xác nhận thanh toán.";
-                return RedirectToAction("Payment", new { bookingId });
-            }
+                var payment = await _context.Payments
+                    .Where(p => p.BookingId == bookingId)
+                    .OrderByDescending(p => p.CreatedAt)
+                    .ThenByDescending(p => p.PaymentId)
+                    .FirstOrDefaultAsync();
 
-            var payment = await _context.Payments
-                .Where(p => p.BookingId == bookingId)
-                .OrderByDescending(p => p.CreatedAt)
-                .FirstOrDefaultAsync();
+                if (payment == null)
+                {
+                    return BookingError("Không tìm thấy thông tin thanh toán. Nếu đã chuyển khoản, hãy liên hệ hỗ trợ; không chuyển khoản lại.");
+                }
 
-            if (payment == null)
-            {
-                TempData["PaymentError"] = "Không tìm thấy thông tin thanh toán.";
-                return RedirectToAction("Payment", new { bookingId });
-            }
+                var code = string.IsNullOrWhiteSpace(transactionCode) ? null : transactionCode.Trim();
+                if (!CanAcknowledgeTransfer(booking, payment))
+                {
+                    return BookingError("Booking hoặc thanh toán không còn hiệu lực. Nếu đã chuyển khoản, hãy liên hệ hỗ trợ để đối soát; không chuyển khoản lại.");
+                }
+                if (payment.HasTransferAcknowledgement())
+                {
+                    TempData["BookingSuccess"] = "Yêu cầu thanh toán đã được ghi nhận. Bạn không cần chuyển khoản lại.";
+                    return RedirectToAction("Bookings", "Account");
+                }
+                if (code?.Length > 80) return BadRequest("Mã giao dịch tối đa 80 ký tự.");
+                if (!string.IsNullOrWhiteSpace(code))
+                {
+                    payment.TransactionCode = code;
+                }
 
-            var code = string.IsNullOrWhiteSpace(transactionCode) ? null : transactionCode.Trim();
-            if (booking.Status == "Confirmed" || payment.Status is "Paid" or "Processing")
+                payment.Status = "Processing";
+                booking.Status = "Processing";
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    // SaveChanges is atomic. Reload before checking a concurrent cancellation,
+                    // approval or duplicate acknowledgement; this never initiates a bank transfer.
+                    await _context.Entry(booking).ReloadAsync();
+                    await _context.Entry(payment).ReloadAsync();
+                    if (_context.Entry(booking).State == EntityState.Detached) break;
+                    continue;
+                }
+
+                TempData["BookingSuccess"] = "Đã ghi nhận thông báo chuyển khoản, đang chờ đối soát. Bạn không cần chuyển khoản lại.";
                 return RedirectToAction("Bookings", "Account");
-            if (code?.Length > 80) return BadRequest("Mã giao dịch tối đa 80 ký tự.");
-            if (!string.IsNullOrWhiteSpace(code))
-            {
-                payment.TransactionCode = code;
             }
 
-            payment.Status = "Processing";
-            booking.Status = "Processing";
-
-            await _context.SaveChangesAsync();
-
-            TempData["BookingSuccess"] = "Đặt tour thành công. Đã ghi nhận thanh toán.";
-            return RedirectToAction("Bookings", "Account");
+            return BookingError("Booking đang cập nhật. Hãy kiểm tra trạng thái hoặc liên hệ hỗ trợ nếu đã chuyển khoản; không chuyển khoản lại.");
         }
 
+        private static bool CanAcknowledgeTransfer(Booking booking, Payment payment) =>
+            !string.Equals(booking.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)
+            && payment.Status is ("Pending" or "PendingConfirmation" or "Processing" or "Paid")
+            && booking.SeatReservationState is not ("Released" or "Expired");
 
-    
+        private IActionResult BookingError(string message)
+        {
+            TempData["BookingError"] = message;
+            return RedirectToAction("Bookings", "Account");
+        }
 }

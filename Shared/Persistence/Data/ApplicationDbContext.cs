@@ -11,12 +11,21 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public bool EventsEnabled { get; set; }
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<Tourbooking.Catalog.Reservations.SeatReservation> SeatReservations => Set<Tourbooking.Catalog.Reservations.SeatReservation>();
     public bool ApplyingProjection { get; set; }
+    public string? ServiceSchema { get; }
+    public bool UsesMongoChat { get; }
+    public bool RequiresSqlTable(string table) => ServiceData.RequiresTable(EventSource, table) &&
+        !(UsesMongoChat && ServiceData.Owner(table) == "support");
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IConfiguration? configuration = null)
         : base(options)
     {
         EventSource = configuration?["Service:Name"] ?? "standalone";
         EventsEnabled = configuration?.GetValue("RabbitMQ:Enabled", false) ?? false;
+        ServiceSchema = configuration?["Database:Schema"];
+        UsesMongoChat = configuration?["Chat:Provider"] == "MongoDB";
+        if (!string.IsNullOrEmpty(ServiceSchema) && !System.Text.RegularExpressions.Regex.IsMatch(ServiceSchema, "^[a-z][a-z0-9_]{0,62}$"))
+            throw new InvalidOperationException("Invalid service database schema.");
     }
 
     public DbSet<Tour> Tours { get; set; }
@@ -26,11 +35,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<TourReviewVote> TourReviewVotes { get; set; }
     public DbSet<ContactInquiry> ContactInquiries { get; set; }
     public DbSet<ContactInquiryReply> ContactInquiryReplies { get; set; }
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, ServiceModelCacheKeyFactory>();
     
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<Tourbooking.Catalog.Reservations.SeatReservation>().HasKey(r => r.Id);
+        builder.Entity<Tourbooking.Catalog.Reservations.SeatReservation>().Property(r => r.UserId).HasMaxLength(450);
+        builder.Entity<Tourbooking.Catalog.Reservations.SeatReservation>().Property(r => r.Status).HasMaxLength(16);
+        builder.Entity<Tourbooking.Catalog.Reservations.SeatReservation>().Property(r => r.UnitPrice).HasPrecision(18, 2);
+        builder.Entity<Tourbooking.Catalog.Reservations.SeatReservation>().HasIndex(r => new { r.TourId, r.TravelDate, r.Status });
         builder.Entity<InboxMessage>().HasKey(x => x.Id);
         builder.Entity<OutboxMessage>().HasKey(m => m.Id);
         builder.Entity<OutboxMessage>().Property(m => m.Source).HasMaxLength(40);
@@ -118,6 +134,34 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(r => r.UserId)
             .OnDelete(DeleteBehavior.NoAction);
 
+        if (Database.IsSqlServer())
+        {
+            foreach (var entity in builder.Model.GetEntityTypes().ToArray())
+                if (!RequiresSqlTable(entity.GetTableName()!))
+                    builder.Entity(entity.ClrType).ToTable(entity.GetTableName()!, table => table.ExcludeFromMigrations());
+            if (!string.IsNullOrEmpty(ServiceSchema))
+                foreach (var entity in builder.Model.GetEntityTypes())
+                    entity.SetSchema(ServiceData.Owner(entity.GetTableName()!) == "" || ServiceData.IsOwned(EventSource, entity)
+                        ? ServiceSchema : ServiceSchema + "_read");
+            var utc = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
+                value => value, value => DateTime.SpecifyKind(value, DateTimeKind.Utc));
+            foreach (var property in builder.Model.GetEntityTypes().SelectMany(e => e.GetProperties())
+                .Where(p => (p.ClrType == typeof(DateTime) || p.ClrType == typeof(DateTime?))
+                    && p.Name is not ("TravelDate" or "OriginalTravelDate")))
+                property.SetValueConverter(utc);
+            foreach (var entity in builder.Model.GetEntityTypes().Where(e => !ServiceData.IsOwned(EventSource, e)))
+            {
+                foreach (var property in entity.GetProperties())
+                {
+                    if (property.IsPrimaryKey()) property.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
+                    if (property.Name == "Version")
+                    {
+                        property.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
+                        property.SetColumnType("varbinary(8)");
+                    }
+                }
+            }
+        }
         if (Database.IsSqlite())
         {
             builder.Entity<Booking>().Property(b => b.Version).IsConcurrencyToken().ValueGeneratedNever();
@@ -135,14 +179,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         ChangeTracker.DetectChanges();
-        if (!ApplyingProjection && Database.IsSqlite())
+        if (!ApplyingProjection)
         {
             foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
             {
                 var table = entry.Metadata.GetTableName()!;
                 if (ServiceData.Owner(table) != "" && !ServiceData.IsOwned(EventSource, entry.Metadata))
                     throw new InvalidOperationException($"{EventSource} cannot write {table}; owner is {ServiceData.Owner(table)}.");
-                if (entry.State != EntityState.Deleted && entry.Entity is Booking or Payment)
+                if (Database.IsSqlite() && entry.State != EntityState.Deleted && entry.Entity is Booking or Payment)
                     entry.Property("Version").CurrentValue = Guid.NewGuid().ToByteArray();
             }
         }
@@ -178,7 +222,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                         ContactInquiryReply => "ContactInquiryReplies",
                         _ => throw new InvalidOperationException()
                     }), id, userId, email, status, DateTime.UtcNow,
-                    Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
+                    Activity.Current?.GetTagItem("correlation.id")?.ToString() ?? Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
                     entity is Booking booking ? JsonSerializer.Serialize(new BookingEventData(booking.BookingId, booking.UserId, booking.TotalPrice, booking.Status))
                     : null);
                 OutboxMessages.Add(new OutboxMessage

@@ -1,0 +1,24 @@
+# Merge with compose.hybrid.yaml and compose.ha.yaml using a generated test env file.
+services:
+  reservation-test-init:
+    image: mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd"]
+    command: ["-S", "sqlserver", "-U", "sa", "-C", "-b", "-i", "/verification.sql"]
+    environment:
+      SQLCMDPASSWORD: ${SQL_PASSWORD}
+    volumes: ["./tests/provision-verification.sql:/verification.sql:ro"]
+    depends_on:
+      sqlserver: { condition: service_healthy }
+  sqlserver:
+    environment:
+      MSSQL_MEMORY_LIMIT_MB: "1536"
+  kong:
+    environment:
+      KONG_NGINX_WORKER_PROCESSES: "1"
+  tests:
+    command: ["dotnet", "test", "tests/RabbitMq.Tests/RabbitMq.Tests.csproj", "--no-restore", "--logger", "trx;LogFileName=hybrid.trx", "--results-directory", "/test-results", "--verbosity", "quiet"]
+    volumes: ["./artifacts/hybrid-verification/test-results:/test-results"]
+    environment:
+      TOURBOOKING_EXTERNAL_TESTS: "1"
+      TOURBOOKING_URL: http://edge:8000
+      TOURBOOKING_RESERVATION_SQL: Server=sqlserver;Database=TourbookingReservationTest_Suite;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True

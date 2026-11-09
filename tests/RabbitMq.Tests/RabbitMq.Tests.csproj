@@ -16,7 +16,10 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <ProjectReference Include="../../services/booking/Modules/Payment/Payment.csproj" Aliases="PaymentModule" />
     <ProjectReference Include="../../services/Notification/Notification.csproj" />
+    <ProjectReference Include="../../services/Identity/Identity.csproj" />
+    <ProjectReference Include="../../services/booking/Modules/Booking/Booking.csproj" />
     <ProjectReference Include="../../Shared/Persistence/Tourbooking.Persistence.csproj" />
     <ProjectReference Include="../../Shared/Routing/Tourbooking.Routing.csproj" />
     <ProjectReference Include="../../Shared/Hosting/Tourbooking.Hosting.csproj" />

@@ -52,7 +52,8 @@ async function form(client, action, id, page = '/Account/Bookings') {
         const url = new URL(href, base);
         if ((url.pathname === action || url.pathname.startsWith(action+'/')) &&
             (values.bookingId === String(id) || url.pathname.endsWith('/'+id) || url.searchParams.get('id') === String(id))) {
-            assert.ok(values.bookingVersion, 'Every mutation form must carry the original booking version');
+            if (action !== '/Home/ConfirmPayment')
+                assert.ok(values.bookingVersion, 'Booking mutations must carry the original booking version');
             assert.ok(values.__RequestVerificationToken, 'CSRF token must remain enabled');
             return {href, values};
         }
@@ -169,8 +170,14 @@ for (const first of ['approve','cancel']) {
     const id=await booking(false), a=await form(userA,'/Account/RescheduleBooking',id);
     const b=await form(userB,'/Home/ConfirmPayment',id,'/Home/Payment?bookingId='+id);
     assert.equal((await submit(userA,a,{newTravelDate:dateAfter(64)})).status,302);
-    await conflict(await submit(userB,b,{transactionCode:'STALE-PAYMENT'}));
-    assert.notEqual((await userA.state(id)).status,'Processing');
-    console.log('PASS: stale payment confirmation cannot overwrite a rescheduled booking');
+    assert.equal((await submit(userB,b,{transactionCode:'TRANSFER-ACK'})).status,302);
+    assert.equal((await submit(userB,b,{transactionCode:'DUPLICATE-ACK'})).status,302);
+    const state=await userA.state(id);
+    assert.equal(state.status,'Processing');
+    assert.ok(state.travelDate.startsWith(dateAfter(64)));
+    const page=await userB.page('/Home/Payment?bookingId='+id);
+    assert.ok(!page.includes('action="/Home/ConfirmPayment"'));
+    assert.ok(!page.includes('alt="QR thanh toán"'));
+    console.log('PASS: transfer acknowledgement survives rescheduling, repeats safely and hides payment QR');
 }
 console.log('All isolated HTTP concurrency checks passed. Production databases were not used.');

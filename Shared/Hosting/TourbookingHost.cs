@@ -22,8 +22,14 @@ builder.Configuration["Service:Name"] = service;
 var dataDirectory = builder.Configuration["Database:Directory"] ?? Path.Combine(builder.Environment.ContentRootPath, "data");
 Directory.CreateDirectory(dataDirectory);
 var databaseName = builder.Configuration["Database:Name"] ?? service;
-builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite(
-    $"Data Source={Path.Combine(dataDirectory, databaseName + ".db")};Foreign Keys=False;Default Timeout=30"));
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    if (builder.Configuration["Database:Provider"] == "SqlServer")
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("SQL Server connection is required."));
+    else
+        options.UseSqlite($"Data Source={Path.Combine(dataDirectory, databaseName + ".db")};Foreign Keys=False;Default Timeout=30");
+});
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
         options.Password.RequiredLength = 6;
@@ -75,6 +81,43 @@ foreach (var assemblyName in controllerAssemblies)
 builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.Routing.IUrlHelperFactory, ServiceUrlHelperFactory>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("sql", tags: ["ready"]);
 builder.Services.AddHttpClient();
+builder.Services.AddRequestRateLimits();
+builder.Services.AddApiBearer(builder.Configuration, service == "identity" ? async context =>
+{
+    var users = context.HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+    var user = await users.GetUserAsync(context.Principal!);
+    if (user == null || await users.IsLockedOutAsync(user) ||
+        context.Principal!.FindFirst(ApiBearerAuthentication.StampClaim)?.Value != ApiBearerAuthentication.HashStamp(user.SecurityStamp))
+    {
+        context.Fail("Identity account is unavailable or the token was revoked.");
+        return;
+    }
+    var identity = (System.Security.Claims.ClaimsIdentity)context.Principal.Identity!;
+    foreach (var role in identity.FindAll(System.Security.Claims.ClaimTypes.Role).ToArray()) identity.RemoveClaim(role);
+    foreach (var role in await users.GetRolesAsync(user)) identity.AddClaim(new(System.Security.Claims.ClaimTypes.Role, role));
+} : null);
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ProjectionRefreshCoordinator>();
+builder.Services.AddHttpClient<Tourbooking.Contracts.ISeatReservationClient, HttpSeatReservationClient>(client => client.Timeout = TimeSpan.FromSeconds(5));
+if (service is "catalog" && builder.Configuration.GetValue("Reservations:Enabled", false))
+{
+    builder.Services.AddScoped<Tourbooking.Catalog.Reservations.ISeatReservationRepository, Tourbooking.Catalog.Reservations.SqlSeatReservationRepository>();
+    builder.Services.AddScoped<Tourbooking.Catalog.Reservations.SeatReservationService>();
+}
+if (service is "booking" && builder.Configuration.GetValue("Reservations:Enabled", false))
+    builder.Services.AddHostedService<BookingSeatReconciler>();
+if (service is "customer" or "support" or "standalone")
+{
+    if (builder.Configuration["Chat:Provider"] == "MongoDB")
+    {
+        builder.Services.AddSingleton<Tourbooking.Chat.MongoChatStore>();
+        builder.Services.AddSingleton<Tourbooking.Chat.IChatStore>(sp => sp.GetRequiredService<Tourbooking.Chat.MongoChatStore>());
+        builder.Services.AddHealthChecks().AddCheck<Tourbooking.Chat.ChatMongoHealthCheck>("chat-mongo", tags: ["ready"]);
+        if (builder.Configuration.GetValue("RabbitMQ:Enabled", false))
+            builder.Services.AddHostedService<Tourbooking.Chat.ChatOutboxDispatcher>();
+    }
+    else builder.Services.AddScoped<Tourbooking.Chat.IChatStore, Tourbooking.Chat.SqliteChatStore>();
+}
 if ((service is "booking" or "payment" or "support" or "identity" or "catalog" or "review" or "standalone") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
     builder.Services.AddHostedService<OutboxDispatcher>();
 if ((service is "customer") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
@@ -92,11 +135,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 app.UseForwardedHeaders();
+app.UseMiddleware<ApiContractMiddleware>();
 app.Use(async (context, next) =>
 {
-    var correlationId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+    var correlationId = context.Items["CorrelationId"]?.ToString() ?? context.TraceIdentifier;
     context.Response.Headers["X-Correlation-ID"] = correlationId;
     context.Response.Headers["X-Service-Name"] = service;
+    context.Response.Headers["X-Service-Node"] = Environment.MachineName;
     await next();
 });
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
@@ -134,6 +179,7 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 if (service is "identity" or "standalone")
@@ -145,17 +191,30 @@ if (service is "identity" or "standalone")
         if (http.User.Identity?.IsAuthenticated != true) return Results.Unauthorized();
         return Results.Ok(http.User.Claims.Select(c => new SharedSessionValidation.SessionClaim(c.Type, c.Value)));
     });
+if (service == "identity")
+    app.MapGet("/internal/auth/token-session", (HttpContext http, IConfiguration config) =>
+    {
+        if (string.IsNullOrEmpty(config["Services:InternalKey"]) || http.Request.Headers["X-Service-Key"] != config["Services:InternalKey"])
+            return Results.Unauthorized();
+        return Results.Ok(http.User.Claims.Where(c => c.Type is System.Security.Claims.ClaimTypes.NameIdentifier or
+            System.Security.Claims.ClaimTypes.Name or System.Security.Claims.ClaimTypes.Email or System.Security.Claims.ClaimTypes.Role)
+            .Select(c => new SharedSessionValidation.SessionClaim(c.Type, c.Value)));
+    }).RequireAuthorization();
 
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapControllers();
+if (service is "catalog" && builder.Configuration.GetValue("Reservations:Enabled", false)) app.MapSeatReservations();
 
 using (var initializationScope = app.Services.CreateScope())
 {
     var dbContext = initializationScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await dbContext.Database.EnsureCreatedAsync();
-    await EnsureTourScheduleColumnsAsync(dbContext);
+    if (builder.Configuration.GetValue("Database:Initialize", true))
+    {
+        await DatabaseInitializer.InitializeAsync(dbContext);
+        if (dbContext.Database.IsSqlite()) await EnsureTourScheduleColumnsAsync(dbContext);
+    }
 }
 if (service is "identity" or "standalone")
 {
@@ -207,7 +266,7 @@ if (service is "catalog" or "standalone")
 }
 
 
-await app.RunAsync();
+if (!builder.Configuration.GetValue("Database:InitializeOnly", false)) await app.RunAsync();
 }
 
 static async Task EnsureTourScheduleColumnsAsync(ApplicationDbContext dbContext)
@@ -247,6 +306,24 @@ static async Task EnsureTourScheduleColumnsAsync(ApplicationDbContext dbContext)
             await command.ExecuteNonQueryAsync();
         }
 
+        // Additive compatibility for existing local SQLite databases; no rows are moved.
+        var bookingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "PRAGMA table_info('Bookings')";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) bookingColumns.Add(reader.GetString(1));
+        }
+        foreach (var name in new[] { "TourNameSnapshot", "TourLocationSnapshot", "DepartureTimeSnapshot", "ReturnTimeSnapshot" })
+        {
+            if (bookingColumns.Contains(name)) continue;
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = $"ALTER TABLE \"Bookings\" ADD COLUMN \"{name}\" TEXT NULL";
+            await command.ExecuteNonQueryAsync();
+        }
+
         await transaction.CommitAsync();
     }
     finally
@@ -266,7 +343,7 @@ static async Task EnsureRolesAndAdminAsync(
     {
         if (!await roleManager.RoleExistsAsync(role))
         {
-            await roleManager.CreateAsync(new IdentityRole(role));
+            RequireIdentitySuccess(await roleManager.CreateAsync(new IdentityRole(role)), "create role");
         }
     }
 
@@ -289,16 +366,19 @@ static async Task EnsureRolesAndAdminAsync(
         };
 
         var createResult = await userManager.CreateAsync(adminUser, adminPassword);
-        if (!createResult.Succeeded)
-        {
-            return;
-        }
+        RequireIdentitySuccess(createResult, "create configured administrator");
     }
 
     if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
     {
-        await userManager.AddToRoleAsync(adminUser, "Admin");
+        RequireIdentitySuccess(await userManager.AddToRoleAsync(adminUser, "Admin"), "assign administrator role");
     }
+}
+
+static void RequireIdentitySuccess(IdentityResult result, string operation)
+{
+    if (!result.Succeeded)
+        throw new InvalidOperationException($"Cannot {operation}: {string.Join(", ", result.Errors.Select(error => error.Code))}.");
 }
 
 public sealed class BackendActionConvention(string backend) : IApplicationModelConvention

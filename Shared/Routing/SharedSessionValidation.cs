@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Tourbooking.Distributed;
 
@@ -18,6 +21,7 @@ public static class SharedSessionValidation
         using var client = services.GetRequiredService<IHttpClientFactory>().CreateClient();
         client.Timeout = TimeSpan.FromSeconds(5);
         client.DefaultRequestHeaders.Add("X-Service-Key", config["Services:InternalKey"]);
+        client.DefaultRequestHeaders.Add("X-Correlation-ID", context.HttpContext.Items["CorrelationId"]?.ToString());
         client.DefaultRequestHeaders.Add("Cookie", context.Request.Headers.Cookie.ToString());
         try
         {

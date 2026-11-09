@@ -8,20 +8,25 @@ namespace Tourbooking.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/bookings")]
+[Route("api/v1/bookings")]
 public sealed class BookingApiController(ApplicationDbContext db) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List() => Ok(await db.Bookings.AsNoTracking()
+    public async Task<IActionResult> List()
+    {
+        HttpContext.Items["Pagination"] = new { page = 1, page_size = 100 };
+        return Ok(await db.Bookings.AsNoTracking()
         .Where(b => b.UserId == User.FindFirstValue(ClaimTypes.NameIdentifier))
         .OrderByDescending(b => b.CreatedAt).Take(100)
-        .Select(b => new { b.BookingId, b.TourId, b.TravelDate, b.GuestCount, b.TotalPrice, b.Status, b.CreatedAt }).ToListAsync());
+        .Select(b => new { b.BookingId, b.TourId, b.TourNameSnapshot, b.TravelDate, b.GuestCount, b.TotalPrice, b.Status, b.CreatedAt }).ToListAsync());
+    }
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Get(int id)
     {
         var booking = await db.Bookings.AsNoTracking()
             .Where(b => b.BookingId == id && b.UserId == User.FindFirstValue(ClaimTypes.NameIdentifier))
-            .Select(b => new { b.BookingId, b.TourId, b.TravelDate, b.GuestCount, b.TotalPrice, b.Status, b.CreatedAt }).FirstOrDefaultAsync();
+            .Select(b => new { b.BookingId, b.TourId, b.TourNameSnapshot, b.TravelDate, b.GuestCount, b.TotalPrice, b.Status, b.CreatedAt }).FirstOrDefaultAsync();
         return booking == null ? NotFound() : Ok(booking);
     }
 

@@ -3,7 +3,6 @@ using System.Globalization;
 using System.IO;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Tourbooking.Models;
@@ -18,12 +17,10 @@ public class AdminController : Controller
 
     private static readonly CultureInfo VnCulture = CultureInfo.GetCultureInfo("vi-VN");
     private readonly ApplicationDbContext _context;
-    private readonly UserManager<ApplicationUser> _userManager;
 
-    public AdminController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+    public AdminController(ApplicationDbContext context)
     {
         _context = context;
-        _userManager = userManager;
     }
 
     private static string GetInitials(string value)
@@ -138,7 +135,7 @@ public class AdminController : Controller
                 GetInitials(b.FullName),
                 b.FullName,
                 b.Email,
-                b.Tour?.Name ?? "-",
+                b.TourNameSnapshot ?? b.Tour?.Name ?? "-",
                 b.TravelDate.ToString("dd/MM/yyyy"),
                 b.GuestCount,
                 b.TotalPrice.ToString("C0", VnCulture),
@@ -190,7 +187,7 @@ public class AdminController : Controller
             .OrderByDescending(p => p.CreatedAt)
             .FirstOrDefaultAsync();
         if (payment != null)
-            payment.Status = payment.Status == "Paid" ? "RefundPending" : "Cancelled";
+            payment.Cancel();
 
         await _context.SaveChangesAsync();
         TempData["BookingAdminMessage"] = $"Đã hủy vé #{id}.";
@@ -239,6 +236,11 @@ public class AdminController : Controller
             return RedirectToBookings(filterStatus, page);
         }
 
+        if (booking.SeatReservationId != null && booking.SeatReservationState != "Confirmed")
+        {
+            TempData["BookingAdminError"] = "Giữ chỗ chưa được Catalog xác nhận. Vui lòng thử lại sau.";
+            return RedirectToBookings(filterStatus, page);
+        }
         payment.Status = "Paid";
         payment.PaidAt ??= DateTime.UtcNow;
         booking.Status = "Confirmed";

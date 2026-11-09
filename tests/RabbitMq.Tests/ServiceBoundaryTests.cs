@@ -16,7 +16,7 @@ public class ServiceBoundaryTests
     [InlineData("Admin", "Contacts", "support")]
     [InlineData("Admin", "ReplyContact", "support")]
     [InlineData("Admin", "Dashboard", "reporting")]
-    [InlineData("Admin", "ExportUsers", "reporting")]
+    [InlineData("Admin", "ExportUsers", "identity")]
     [InlineData("Admin", "ExportToursExcel", "reporting")]
     [InlineData("Admin", "ExportBookingsExcel", "reporting")]
     [InlineData("Home", "Booking", "booking")]

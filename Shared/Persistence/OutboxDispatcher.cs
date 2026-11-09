@@ -26,7 +26,10 @@ public sealed class OutboxDispatcher(IServiceScopeFactory scopes, IConfiguration
                     var leaseId = Guid.NewGuid();
                     await using (var transaction = await db.Database.BeginTransactionAsync(stoppingToken))
                     {
-                        // One instance per SQLite service. Expired leases recover after a crash.
+                        // SQL replicas serialize lease acquisition; publication remains at-least-once.
+                        // SQLite deployments retain one writer per service.
+                        if (db.Database.IsSqlServer())
+                            await db.Database.ExecuteSqlRawAsync("DECLARE @result int; EXEC @result=sys.sp_getapplock @Resource='outbox-lease', @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=5000; IF @result<0 THROW 51000,'Outbox lease lock unavailable',1;", stoppingToken);
                         var batch = await db.OutboxMessages.Where(m => sources.Contains(m.Source) && m.PublishedAt == null
                             && (m.LockedUntil == null || m.LockedUntil < now)).OrderBy(m => m.CreatedAt).Take(20).ToListAsync(stoppingToken);
                         foreach (var item in batch)

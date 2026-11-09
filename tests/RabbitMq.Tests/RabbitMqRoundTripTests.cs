@@ -5,7 +5,7 @@ namespace RabbitMq.Tests;
 
 public class RabbitMqRoundTripTests
 {
-    [Fact]
+    [ExternalServiceFact(rabbitMq: true)]
     public async Task PublishesAndReceivesMessage()
     {
         var factory = new ConnectionFactory

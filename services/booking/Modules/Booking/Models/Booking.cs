@@ -7,11 +7,23 @@ public class Booking
     [Timestamp]
     public byte[] Version { get; set; } = [];
     public Guid? RequestId { get; set; }
+    public Guid? SeatReservationId { get; set; }
+    public Guid? SeatReservationToRelease { get; set; }
+    public DateTime? SeatPreviousTravelDate { get; set; }
+    [StringLength(16)]
+    public string? SeatReservationState { get; set; }
     [Key]
     public int BookingId { get; set; }
 
     [Required]
     public int TourId { get; set; }
+
+    [StringLength(300)]
+    public string? TourNameSnapshot { get; set; }
+    [StringLength(300)]
+    public string? TourLocationSnapshot { get; set; }
+    public TimeOnly? DepartureTimeSnapshot { get; set; }
+    public TimeOnly? ReturnTimeSnapshot { get; set; }
 
     [Required]
     public string UserId { get; set; } = string.Empty;

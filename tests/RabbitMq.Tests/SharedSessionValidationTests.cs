@@ -12,6 +12,37 @@ namespace RabbitMq.Tests;
 
 public class SharedSessionValidationTests
 {
+    private sealed class AuthenticationService : IAuthenticationService
+    {
+        public bool SignedOut { get; private set; }
+        public Task<AuthenticateResult> AuthenticateAsync(HttpContext context,string? scheme) => Task.FromResult(AuthenticateResult.NoResult());
+        public Task ChallengeAsync(HttpContext context,string? scheme,AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task ForbidAsync(HttpContext context,string? scheme,AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task SignInAsync(HttpContext context,string? scheme,ClaimsPrincipal principal,AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task SignOutAsync(HttpContext context,string? scheme,AuthenticationProperties? properties) { SignedOut=true; return Task.CompletedTask; }
+    }
+
+    [Fact]
+    public async Task RevokedIdentitySessionIsRejectedAndSignedOut()
+    {
+        using var handler=new Handler(HttpStatusCode.Unauthorized);
+        using var client=new HttpClient(handler);
+        var authentication=new AuthenticationService();
+        using var services=new ServiceCollection().AddLogging()
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>
+            { ["Services:identity"]="http://identity", ["Services:InternalKey"]="test-key" }).Build())
+            .AddSingleton<IHttpClientFactory>(new Factory(client))
+            .AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
+        var http=new DefaultHttpContext { RequestServices=services };
+        http.Request.Headers.Cookie="session-cookie";
+        var scheme=new AuthenticationScheme("Identity.Application",null,typeof(CookieAuthenticationHandler));
+        var context=new CookieValidatePrincipalContext(http,scheme,new CookieAuthenticationOptions(),
+            new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity("Identity.Application")),
+                new AuthenticationProperties { IssuedUtc=DateTimeOffset.UtcNow.AddMinutes(-31) },scheme.Name));
+        await SharedSessionValidation.ValidateAsync(context);
+        Assert.Null(context.Principal);
+        Assert.True(authentication.SignedOut);
+    }
     private sealed class Handler(HttpStatusCode status) : HttpMessageHandler
     {
         public int Calls { get; private set; }

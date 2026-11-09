@@ -210,7 +210,7 @@ public class AdminController : Controller
             sheet.Cell(row, 1).Value = booking.BookingId;
             sheet.Cell(row, 2).Value = booking.FullName;
             sheet.Cell(row, 3).Value = booking.Email;
-            sheet.Cell(row, 4).Value = booking.Tour?.Name ?? "-";
+            sheet.Cell(row, 4).Value = booking.TourNameSnapshot ?? booking.Tour?.Name ?? "-";
             sheet.Cell(row, 5).Value = booking.TravelDate.ToString("dd/MM/yyyy");
             sheet.Cell(row, 6).Value = booking.GuestCount;
             sheet.Cell(row, 7).Value = booking.TotalPrice;
@@ -229,54 +229,7 @@ public class AdminController : Controller
     }
 
 
-    [HttpGet]
-    public async Task<IActionResult> ExportUsers()
-    {
-        var users = await _userManager.Users.AsNoTracking().OrderBy(u => u.Email).ToListAsync();
 
-        using var workbook = new XLWorkbook();
-        var sheet = workbook.Worksheets.Add("Users");
-        sheet.Cell(1, 1).Value = "Ho va ten";
-        sheet.Cell(1, 2).Value = "Email";
-        sheet.Cell(1, 3).Value = "Vai tro";
-        sheet.Cell(1, 4).Value = "Ngay gia nhap";
-        sheet.Cell(1, 5).Value = "Trang thai";
-        sheet.Cell(1, 6).Value = "So dien thoai";
-        sheet.Cell(1, 7).Value = "Dia chi";
-
-        var row = 2;
-        foreach (var user in users)
-        {
-            var roles = await _userManager.GetRolesAsync(user);
-            var role = roles.FirstOrDefault() ?? "User";
-            var roleLabel = role == "Admin" ? "Quan tri" : "Nguoi dung";
-            var status = user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow
-                ? "Tam dung"
-                : "Dang hoat dong";
-            var joinedDate = user.CreatedAt == default
-                ? string.Empty
-                : user.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy");
-            var displayName = string.IsNullOrWhiteSpace(user.UserName) ? user.Email ?? "" : user.UserName;
-
-            sheet.Cell(row, 1).Value = displayName;
-            sheet.Cell(row, 2).Value = user.Email ?? string.Empty;
-            sheet.Cell(row, 3).Value = roleLabel;
-            sheet.Cell(row, 4).Value = joinedDate;
-            sheet.Cell(row, 5).Value = status;
-            sheet.Cell(row, 6).Value = user.PhoneNumber ?? string.Empty;
-            sheet.Cell(row, 7).Value = user.Address ?? string.Empty;
-            row++;
-        }
-
-        sheet.Columns().AdjustToContents();
-
-        await using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        stream.Position = 0;
-
-        var fileName = $"users-report-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
-        return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
-    }
 
 
 }
