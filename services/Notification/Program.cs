@@ -32,6 +32,8 @@ builder.Services.AddApiBearer(builder.Configuration);
 builder.Services.AddSingleton<ConsumerState>();
 builder.Services.AddHostedService<NotificationConsumer>();
 var app = builder.Build();
+app.UseRouting();
+app.UseServiceMetrics();
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Service-Node"] = Environment.MachineName;
@@ -54,7 +56,27 @@ app.MapGet("/api/notifications", async (ClaimsPrincipal user, INotificationStore
 app.MapGet("/api/notifications/admin", async (INotificationStore db, CancellationToken ct) => Results.Ok(
     await db.ListAsync(null, true, ct)))
     .RequireAuthorization(policy => policy.RequireRole("Admin"));
-app.MapGet("/api/v1/notifications", async (ClaimsPrincipal user, INotificationStore db, HttpContext http, CancellationToken ct) =>
+// Admin bell: unread count since this admin last opened it + latest actionable events (polled by the admin layout).
+app.MapGet("/api/notifications/admin/summary", async (ClaimsPrincipal user, INotificationStore db, HttpContext http, CancellationToken ct) =>
+{
+    http.Response.Headers.CacheControl = "no-store";
+    var adminId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrEmpty(adminId)) return Results.Unauthorized();
+    var seenAt = await db.GetOrStartAdminSeenAsync(adminId, DateTime.UtcNow, ct);
+    var items = await db.ListAdminFeedAsync(AdminFeed.DefaultLimit, ct);
+    var unread = await db.CountAdminFeedSinceAsync(seenAt, ct);
+    return Results.Ok(new AdminNotificationSummary(unread, items.Select(n => AdminFeed.ToItem(n, seenAt)).ToList()));
+}).RequireAuthorization(policy => policy.RequireRole("Admin"));
+app.MapPost("/api/notifications/admin/seen", async (ClaimsPrincipal user, INotificationStore db, HttpContext http, CancellationToken ct) =>
+{
+    // Cookie is SameSite=Lax; the custom header additionally blocks cross-site form posts (it forces a CORS preflight).
+    if (http.Request.Headers["X-Requested-With"] != "XMLHttpRequest") return Results.BadRequest();
+    var adminId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrEmpty(adminId)) return Results.Unauthorized();
+    await db.MarkAdminSeenAsync(adminId, DateTime.UtcNow, ct);
+    return Results.NoContent();
+}).RequireAuthorization(policy => policy.RequireRole("Admin"));
+app.MapGet("/api/v1/notifications",async (ClaimsPrincipal user, INotificationStore db, HttpContext http, CancellationToken ct) =>
 {
     http.Items["Pagination"] = new { page = 1, page_size = 100 };
     return Results.Ok((await db.ListAsync(user.FindFirstValue(ClaimTypes.NameIdentifier), false, ct)).Select(NotificationResponse.From));

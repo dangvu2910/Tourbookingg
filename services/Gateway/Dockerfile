@@ -12,21 +12,21 @@ ARG SERVICE=Gateway
 ARG SERVICE_DIR=Gateway
 RUN set -eu; \
     mkdir -p /service-wwwroot; \
-    copy_asset() { mkdir -p "/service-wwwroot/$(dirname "$1")"; cp "/src/wwwroot/$1" "/service-wwwroot/$1"; }; \
-    copy_directory() { mkdir -p "/service-wwwroot/$(dirname "$1")"; cp -R "/src/wwwroot/$1" "/service-wwwroot/$1"; }; \
+    copy_asset() { mkdir -p "/service-wwwroot/$(dirname "$1")"; cp "/src/Shared/wwwroot/$1" "/service-wwwroot/$1"; }; \
+    copy_directory() { mkdir -p "/service-wwwroot/$(dirname "$1")"; cp -R "/src/Shared/wwwroot/$1" "/service-wwwroot/$1"; }; \
     copy_service_assets() { cp -R "/src/services/${SERVICE_DIR:-$SERVICE}/wwwroot/." /service-wwwroot/; }; \
     case "$SERVICE" in \
       Identity) \
-        copy_service_assets; \
+        copy_service_assets; copy_asset js/site.js; \
         copy_directory lib/bootstrap; copy_directory lib/jquery; copy_directory lib/jquery-validation; copy_directory lib/jquery-validation-unobtrusive ;; \
       Catalog) \
-        copy_service_assets; \
+        copy_service_assets; copy_asset js/site.js; \
         copy_directory lib/bootstrap; copy_directory lib/jquery ;; \
       BookingPlatform) \
-        copy_service_assets; \
+        copy_service_assets; copy_asset js/site.js; \
         copy_directory lib/bootstrap; copy_directory lib/jquery; copy_directory lib/jquery-validation; copy_directory lib/jquery-validation-unobtrusive ;; \
       CustomerExperience) \
-        copy_service_assets; \
+        copy_service_assets; copy_asset js/site.js; \
         copy_directory lib/bootstrap; copy_directory lib/jquery ;; \
       Gateway) copy_asset favicon.ico; copy_service_assets; copy_directory images ;; \
       Notification) ;; \

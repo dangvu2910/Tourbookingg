@@ -1,0 +1,90 @@
+# Standalone isolated cluster lab. Not an override for live databases.
+name: tourbooking-replication-test
+x-mongo: &mongo
+  image: mongo:8.0.17
+  command: ["mongod", "--replSet", "tourbooking-rs", "--keyFile", "/key/keyfile", "--bind_ip_all"]
+  environment: &mongo-env
+    MONGO_INITDB_ROOT_USERNAME: mongo_admin
+    MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Use Test-Replication.ps1}
+  depends_on:
+    mongo-key: { condition: service_completed_successfully }
+  healthcheck:
+    # Official entrypoint uses a temporary localhost-only server during initialization.
+    # Probe the container hostname so dependents wait for the final network listener.
+    test: ["CMD-SHELL", "mongosh --host \"$${HOSTNAME}\" --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+x-rabbit: &rabbit
+  image: rabbitmq:4.1-management
+  stop_grace_period: 60s
+  environment: &rabbit-env
+    RABBITMQ_DEFAULT_USER: tourbooking
+    RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Use Test-Replication.ps1}
+    RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_COOKIE:?Use Test-Replication.ps1}
+    RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S 2:2"
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+    interval: 5s
+    timeout: 10s
+    retries: 40
+services:
+  mongo-key:
+    image: mongo:8.0.17
+    user: "0"
+    environment:
+      MONGO_KEYFILE: ${MONGO_KEYFILE:?Use Test-Replication.ps1}
+    entrypoint: ["bash", "-ec"]
+    command: ['if [ ! -s /key/keyfile ]; then printf "%s" "$$MONGO_KEYFILE" > /key/keyfile; fi; chown 999:999 /key/keyfile; chmod 400 /key/keyfile']
+    volumes: ["mongo-key:/key"]
+  mongodb-a:
+    <<: *mongo
+    hostname: mongodb-a
+    volumes:
+      - mongo-a:/data/db
+      - mongo-key:/key:ro
+      - ./infrastructure/mongo/replica-init.js:/replica-init.js:ro
+  mongodb-b:
+    <<: *mongo
+    hostname: mongodb-b
+    volumes: ["mongo-b:/data/db", "mongo-key:/key:ro"]
+  mongodb-c:
+    <<: *mongo
+    hostname: mongodb-c
+    volumes: ["mongo-c:/data/db", "mongo-key:/key:ro"]
+  rabbitmq-a:
+    <<: *rabbit
+    hostname: rabbitmq-a
+    ports: ["127.0.0.1:15681:15672"]
+    volumes:
+      - rabbit-a:/var/lib/rabbitmq
+      - ./infrastructure/rabbitmq/cluster.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infrastructure/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+  rabbitmq-b:
+    <<: *rabbit
+    hostname: rabbitmq-b
+    ports: ["127.0.0.1:15682:15672"]
+    depends_on:
+      # Persisted cluster members must be able to start concurrently on restart.
+      rabbitmq-a: { condition: service_started }
+    volumes:
+      - rabbit-b:/var/lib/rabbitmq
+      - ./infrastructure/rabbitmq/cluster.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infrastructure/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+  rabbitmq-c:
+    <<: *rabbit
+    hostname: rabbitmq-c
+    depends_on:
+      rabbitmq-a: { condition: service_started }
+    volumes:
+      - rabbit-c:/var/lib/rabbitmq
+      - ./infrastructure/rabbitmq/cluster.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infrastructure/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+volumes:
+  mongo-key:
+  mongo-a:
+  mongo-b:
+  mongo-c:
+  rabbit-a:
+  rabbit-b:
+  rabbit-c:

@@ -8,16 +8,20 @@ public static class ServiceBoundary
 
     public static string[] Owners(string backend) => backend switch
     {
-        "booking" => ["booking", "payment", "reporting"],
-        "customer" => ["review", "support"],
-        "identity" or "catalog" or "notification" => [backend],
+        "identity" => ["identity", "review"],
+        "catalog" => ["catalog", "reporting"],
+        "booking" => ["booking", "payment"],
+        "customer" => ["support"],
+        "notification" => [backend],
         _ => []
     };
 
     public static string BackendFor(string service) => service switch
     {
-        "payment" or "reporting" => "booking",
-        "review" or "support" => "customer",
+        "review" => "identity",
+        "reporting" => "catalog",
+        "payment" => "booking",
+        "support" => "customer",
         _ => service
     };
 

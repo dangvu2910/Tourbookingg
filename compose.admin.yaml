@@ -1,4 +1,6 @@
 # Optional local administration only. Keep the base stack private by default.
+# Application services publish no ports: the website is reachable only through Kong (127.0.0.1:8080).
+# These data-store/broker ports bind to 127.0.0.1 for SSMS, mongosh and RabbitMQ management.
 services:
   sqlserver:
     ports: ["127.0.0.1:14333:1433"]

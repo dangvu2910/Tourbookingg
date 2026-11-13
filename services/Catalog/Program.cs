@@ -1,1 +1,2 @@
-await Tourbooking.Distributed.TourbookingHost.RunAsync(args, "catalog");
+await Tourbooking.Distributed.TourbookingHost.RunAsync(
+    args, "catalog", "Tours", "Reporting");

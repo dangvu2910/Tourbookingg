@@ -77,6 +77,7 @@ app.UseStaticFiles(new StaticFileOptions
     FileProvider = webRootFileProvider
 });
 app.UseRouting();
+app.UseServiceMetrics();
 app.MapHealthChecks("/health/live");
 app.MapGet("/health/ready", () => Results.Ok());
 app.MapReverseProxy();

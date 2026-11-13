@@ -19,9 +19,9 @@ x-env: &env
   Services__catalog: http://catalog:8080
   Services__booking: http://booking:8080
   Services__payment: http://booking:8080
-  Services__review: http://customer:8080
+  Services__review: http://identity:8080
   Services__support: http://customer:8080
-  Services__reporting: http://booking:8080
+  Services__reporting: http://catalog:8080
   Services__notification: http://notification:8080
   Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
   Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
@@ -103,6 +103,7 @@ services:
       <<: *env
       Database__Initialize: "true"
       Database__InitializeOnly: "true"
+      Database__Schema: identity
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=IdentityDB;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
       AdminUser__Email: ${ADMIN_EMAIL}
       AdminUser__Password: ${HYBRID_ADMIN_PASSWORD:?Run Initialize-Environment.ps1}
@@ -117,6 +118,7 @@ services:
       <<: *env
       Database__Initialize: "true"
       Database__InitializeOnly: "true"
+      Database__Schema: catalog
       Database__SeedDemo: ${HYBRID_SEED_DEMO:-true}
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=CatalogDB;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
     volumes: ["hybrid-keys:/keys"]
@@ -125,11 +127,12 @@ services:
 
   booking-init:
     image: tourbooking-hybrid-booking
-    build: { context: ., dockerfile: services/booking/Dockerfile, args: { SERVICE: BookingPlatform, SERVICE_DIR: booking } }
+    build: { context: ., dockerfile: services/Booking/Dockerfile, args: { SERVICE: BookingPlatform, SERVICE_DIR: Booking } }
     environment:
       <<: *env
       Database__Initialize: "true"
       Database__InitializeOnly: "true"
+      Database__Schema: booking
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=BookingDB;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
     volumes: ["hybrid-keys:/keys"]
     depends_on:
@@ -137,11 +140,12 @@ services:
 
   customer-init:
     image: tourbooking-hybrid-customer
-    build: { context: ., dockerfile: services/customer/Dockerfile, args: { SERVICE: CustomerExperience, SERVICE_DIR: customer } }
+    build: { context: ., dockerfile: services/Customer/Dockerfile, args: { SERVICE: CustomerExperience, SERVICE_DIR: Customer } }
     environment:
       <<: *env
       Database__Initialize: "true"
       Database__InitializeOnly: "true"
+      Database__Schema: customer
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=CustomerDB;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
     volumes: ["hybrid-keys:/keys"]
     depends_on:
@@ -152,6 +156,7 @@ services:
     image: tourbooking-hybrid-identity
     environment:
       <<: *env
+      Database__Schema: identity
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=IdentityDB;User Id=identity_app;Password=${IDENTITY_SQL_PASSWORD};TrustServerCertificate=True
     depends_on:
       identity-init: { condition: service_completed_successfully }
@@ -161,6 +166,7 @@ services:
     image: tourbooking-hybrid-catalog
     environment:
       <<: *env
+      Database__Schema: catalog
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=CatalogDB;User Id=catalog_app;Password=${CATALOG_SQL_PASSWORD};TrustServerCertificate=True
     volumes: ["hybrid-keys:/keys", "hybrid-images:/app/wwwroot/images"]
     depends_on:
@@ -171,6 +177,7 @@ services:
     image: tourbooking-hybrid-booking
     environment:
       <<: *env
+      Database__Schema: booking
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=BookingDB;User Id=booking_app;Password=${BOOKING_SQL_PASSWORD};TrustServerCertificate=True
     volumes: ["hybrid-keys:/keys", "hybrid-images:/app/wwwroot/images"]
     depends_on:
@@ -181,6 +188,7 @@ services:
     image: tourbooking-hybrid-customer
     environment:
       <<: *env
+      Database__Schema: customer
       ConnectionStrings__DefaultConnection: Server=sqlserver;Database=CustomerDB;User Id=customer_app;Password=${CUSTOMER_SQL_PASSWORD};TrustServerCertificate=True
       Chat__Provider: MongoDB
       Chat__ConnectionString: mongodb://chat_app:${MONGO_CHAT_PASSWORD}@mongodb:27017/ChatDB
@@ -209,15 +217,15 @@ services:
       mongodb: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
 
-  gateway:
+  web-router:
     <<: *app
-    image: tourbooking-hybrid-gateway
+    image: tourbooking-hybrid-web-router
     build: { context: ., dockerfile: services/Gateway/Dockerfile, args: { SERVICE: Gateway } }
     environment:
       <<: *env
     volumes: ["hybrid-images:/app/wwwroot/images"]
 
-  kong:
+  gateway:
     image: kong:3.9.1
     environment:
       KONG_DATABASE: "off"
@@ -229,15 +237,16 @@ services:
       KONG_DNS_STALE_TTL: "5"
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
-    volumes: ["./infrastructure/kong/kong.yml:/etc/kong/kong.yml:ro"]
-    ports: ["127.0.0.1:8080:8000"]
+    volumes: ["./infrastructure/kong/kong.hybrid.yml:/etc/kong/kong.yml:ro"]
+    # Single public entry; no extra edge/LB container.
+    ports: ["127.0.0.1:${HTTP_PORT:-8080}:8000"]
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 10s
       timeout: 5s
       retries: 20
     depends_on:
-      gateway: { condition: service_healthy }
+      web-router: { condition: service_healthy }
       identity: { condition: service_healthy }
       catalog: { condition: service_healthy }
       booking: { condition: service_healthy }
@@ -245,27 +254,12 @@ services:
       notification: { condition: service_healthy }
     restart: unless-stopped
 
-  migrate:
-    profiles: ["migration"]
-    image: tourbooking-hybrid-migration
-    build: { context: ., dockerfile: Dockerfile.hybrid-migration }
-    command: ["apply", "/source", "/report/migration-report.json"]
-    environment:
-      Migration__SqlServer: Server=sqlserver;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
-      Migration__MongoDB: mongodb://mongo_admin:${MONGO_ROOT_PASSWORD}@mongodb:27017/admin
-    volumes:
-      - ${HYBRID_MIGRATION_SOURCE:-./backups}:/source:ro
-      - ${HYBRID_MIGRATION_REPORT:-./artifacts/hybrid-migration}:/report
-    depends_on:
-      sql-provision: { condition: service_completed_successfully }
-      mongodb: { condition: service_healthy }
-
   tests:
     profiles: ["test"]
     build: { context: ., target: source }
-    command: ["dotnet", "test", "tests/RabbitMq.Tests/RabbitMq.Tests.csproj", "--logger", "console;verbosity=normal"]
+    command: ["dotnet", "test", "tests/Tourbooking.Tests/Tourbooking.Tests.csproj", "--logger", "console;verbosity=normal"]
     environment:
-      TOURBOOKING_URL: http://kong:8000
+      TOURBOOKING_URL: http://gateway:8000
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USERNAME: tourbooking
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
@@ -276,7 +270,7 @@ services:
       TEST_SQL_BOOKING: Server=sqlserver;Database=BookingDB;User Id=booking_app;Password=${BOOKING_SQL_PASSWORD};TrustServerCertificate=True
       TEST_SQL_CATALOG: Server=sqlserver;Database=CatalogDB;User Id=catalog_app;Password=${CATALOG_SQL_PASSWORD};TrustServerCertificate=True
     depends_on:
-      kong: { condition: service_healthy }
+      gateway: { condition: service_healthy }
 
 volumes:
   hybrid-sql:

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Composition root: Program.cs, appsettings.json, wwwroot. Feature code lives in Modules/<Module>/{Domain,Application,Infrastructure,Web}. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Modules/**/*</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="Modules/Support/Web/Support.csproj" AdditionalProperties="IsConsolidatedHost=true" />
+  </ItemGroup>
+</Project>

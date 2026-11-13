@@ -46,6 +46,7 @@
                     <span class="pill">Toàn cục</span>
                     <span class="pill">Phân tích</span>
                     <span class="pill">Báo cáo</span>
+                    <partial name="_AdminNotificationBell" />
                     <form asp-controller="Account" asp-action="Logout" method="post" class="admin-logout">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="ghost-action">Đăng xuất</button>

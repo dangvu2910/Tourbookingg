@@ -1,17 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../services/Catalog/Reservations/Domain/Catalog.Reservations.Domain.csproj" />
+    <ProjectReference Include="../../services/Catalog/Modules/Reservations/Domain/Catalog.Reservations.Domain.csproj" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <ProjectReference Include="../Messaging/Tourbooking.Messaging.csproj" />
     <ProjectReference Include="../Routing/Tourbooking.Routing.csproj" />
-    <ProjectReference Include="../../services/Identity/Models/Identity.Models.csproj" />
-    <ProjectReference Include="../../services/Catalog/Models/Catalog.Models.csproj" />
-    <ProjectReference Include="../../services/booking/Modules/Booking/Models/Booking.Models.csproj" />
-    <ProjectReference Include="../../services/booking/Modules/Payment/Models/Payment.Models.csproj" />
-    <ProjectReference Include="../../services/customer/Modules/Review/Models/Review.Models.csproj" />
-    <ProjectReference Include="../../services/customer/Modules/Support/Models/Support.Models.csproj" />
+    <ProjectReference Include="../../services/Identity/Modules/Accounts/Domain/Identity.Models.csproj" />
+    <ProjectReference Include="../../services/Catalog/Modules/Tours/Domain/Catalog.Models.csproj" />
+    <ProjectReference Include="../../services/Booking/Modules/Booking/Domain/Booking.Models.csproj" />
+    <ProjectReference Include="../../services/Booking/Modules/Payment/Domain/Payment.Models.csproj" />
+    <ProjectReference Include="../../services/Identity/Modules/Review/Domain/Review.Models.csproj" />
+    <ProjectReference Include="../../services/Customer/Modules/Support/Domain/Support.Models.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.6" />

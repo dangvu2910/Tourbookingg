@@ -12,8 +12,8 @@ data
 **/*.db
 **/*.db-wal
 **/*.db-shm
-*.docx
-*.pdf
+**/*.docx
+**/*.pdf
 tests/TestResults
 
 services/*/data

@@ -13,7 +13,7 @@ public sealed class OutboxDispatcher(IServiceScopeFactory scopes, IConfiguration
         {
             try
             {
-                await using var connection = await RabbitTopology.Factory(configuration).CreateConnectionAsync(stoppingToken);
+                await using var connection = await RabbitTopology.ConnectAsync(configuration, stoppingToken);
                 await using var channel = await connection.CreateChannelAsync(
                     new CreateChannelOptions(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true), stoppingToken);
                 await RabbitTopology.DeclareAsync(channel, stoppingToken);

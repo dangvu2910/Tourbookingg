@@ -1,0 +1,147 @@
+@* Admin notification bell. Data: Notification service, GET /api/notifications/admin/summary (via web-router).
+   Polls every 10 s; rings and shows a toast when the unread count grows; opening the panel marks everything seen. *@
+<div class="tb-bell" id="tb-bell">
+    <button type="button" class="tb-bell-btn" aria-label="Thông báo" aria-haspopup="true" aria-expanded="false" title="Thông báo">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+        <span class="tb-bell-badge" hidden>0</span>
+    </button>
+    <div class="tb-bell-panel" hidden>
+        <div class="tb-bell-head">
+            <strong>Thông báo</strong>
+            <span class="tb-bell-state"></span>
+        </div>
+        <div class="tb-bell-list"></div>
+        <a class="tb-bell-all" href="/Admin/Bookings">Xem tất cả đơn đặt</a>
+    </div>
+    <div class="tb-bell-toast" role="status" aria-live="polite" hidden></div>
+</div>
+
+<style>
+    .tb-bell { position: relative; display: inline-flex; align-items: center; font-family: inherit; }
+    .tb-bell[hidden] { display: none; }
+    .tb-bell-btn { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+        border: 1px solid rgba(15, 23, 42, .12); background: #fff; color: #1f2937; cursor: pointer; transition: background .15s; }
+    .tb-bell-btn:hover, .tb-bell-btn[aria-expanded="true"] { background: #f3f4f6; }
+    .tb-bell-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    .tb-bell.is-offline .tb-bell-btn { opacity: .55; }
+    .tb-bell-badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+        background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; box-shadow: 0 0 0 2px #fff; }
+    .tb-bell-btn.is-ringing svg { animation: tb-ring .9s ease-in-out 2; transform-origin: 50% 2px; }
+    @@keyframes tb-ring { 0%,100% { transform: rotate(0) } 15% { transform: rotate(16deg) } 30% { transform: rotate(-14deg) }
+        45% { transform: rotate(10deg) } 60% { transform: rotate(-8deg) } 75% { transform: rotate(4deg) } }
+    .tb-bell-panel { position: absolute; top: calc(100% + 10px); right: 0; z-index: 1050; width: min(380px, calc(100vw - 32px));
+        background: #fff; color: #111827; border: 1px solid rgba(15, 23, 42, .1); border-radius: 12px; box-shadow: 0 18px 40px rgba(15, 23, 42, .18); overflow: hidden; }
+    .tb-bell-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+    .tb-bell-state { font-size: 12px; color: #6b7280; }
+    .tb-bell-list { max-height: 360px; overflow-y: auto; }
+    .tb-bell-item { display: block; padding: 12px 16px 12px 28px; position: relative; color: inherit; text-decoration: none; border-bottom: 1px solid #f8fafc; font-size: 14px; line-height: 1.4; }
+    .tb-bell-item:hover { background: #f8fafc; }
+    .tb-bell-item.is-unread { background: #eff6ff; }
+    .tb-bell-item.is-unread::before { content: ""; position: absolute; left: 12px; top: 18px; width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
+    .tb-bell-time { display: block; margin-top: 2px; font-size: 12px; color: #6b7280; }
+    .tb-bell-empty { padding: 24px 16px; text-align: center; color: #6b7280; font-size: 14px; }
+    .tb-bell-all { display: block; padding: 10px 16px; text-align: center; font-size: 13px; font-weight: 600; color: #2563eb; text-decoration: none; border-top: 1px solid #f1f5f9; }
+    .tb-bell-toast { position: fixed; right: 24px; bottom: 24px; z-index: 1060; max-width: min(360px, calc(100vw - 32px)); padding: 14px 16px;
+        background: #111827; color: #fff; border-radius: 10px; box-shadow: 0 12px 30px rgba(0, 0, 0, .25); font-size: 14px; cursor: pointer; }
+    @@media (prefers-reduced-motion: reduce) { .tb-bell-btn.is-ringing svg { animation: none; } }
+</style>
+
+<script>
+    (function () {
+        var root = document.getElementById('tb-bell');
+        if (!root || root.dataset.ready) return;
+        root.dataset.ready = '1';
+        var btn = root.querySelector('.tb-bell-btn'), badge = root.querySelector('.tb-bell-badge'),
+            panel = root.querySelector('.tb-bell-panel'), list = root.querySelector('.tb-bell-list'),
+            state = root.querySelector('.tb-bell-state'), toast = root.querySelector('.tb-bell-toast');
+        var lastUnread = null, timer = null, toastTimer = null, baseTitle = document.title;
+
+        function ago(iso) {
+            var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+            if (s < 60) return 'vừa xong';
+            if (s < 3600) return Math.floor(s / 60) + ' phút trước';
+            if (s < 86400) return Math.floor(s / 3600) + ' giờ trước';
+            return new Date(iso).toLocaleString('vi-VN');
+        }
+
+        function render(data) {
+            var n = data.unread || 0;
+            badge.textContent = n > 99 ? '99+' : String(n);
+            badge.hidden = n === 0;
+            btn.setAttribute('aria-label', n ? 'Thông báo, ' + n + ' mới' : 'Thông báo');
+            document.title = n ? '(' + n + ') ' + baseTitle : baseTitle;
+            state.textContent = n ? n + ' chưa xem' : 'Đã xem hết';
+            list.replaceChildren();
+            (data.items || []).forEach(function (item) {
+                var a = document.createElement('a');
+                a.className = 'tb-bell-item' + (item.unread ? ' is-unread' : '');
+                a.href = item.link;
+                a.textContent = item.message;
+                var t = document.createElement('span');
+                t.className = 'tb-bell-time';
+                t.textContent = ago(item.createdAt);
+                a.appendChild(t);
+                list.appendChild(a);
+            });
+            if (!list.children.length) {
+                var empty = document.createElement('div');
+                empty.className = 'tb-bell-empty';
+                empty.textContent = 'Chưa có thông báo nào.';
+                list.appendChild(empty);
+            }
+            if (lastUnread !== null && n > lastUnread) ring(data.items && data.items.find(function (i) { return i.unread; }));
+            lastUnread = n;
+        }
+
+        function ring(item) {
+            btn.classList.remove('is-ringing');
+            void btn.offsetWidth;
+            btn.classList.add('is-ringing');
+            toast.textContent = '🔔 ' + (item ? item.message : 'Có thông báo mới');
+            toast.onclick = function () { if (item) location.href = item.link; };
+            toast.hidden = false;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(function () { toast.hidden = true; }, 7000);
+        }
+
+        async function load() {
+            if (document.hidden && lastUnread !== null) return;
+            try {
+                var r = await fetch('/api/notifications/admin/summary', { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
+                if (r.status === 401 || r.status === 403) { root.hidden = true; clearInterval(timer); return; }
+                if (!r.ok) throw new Error(String(r.status));
+                render(await r.json());
+                root.classList.remove('is-offline');
+                btn.title = 'Thông báo';
+            } catch (e) {
+                // Notification service down: the bell stays usable, the rest of the admin page is unaffected.
+                root.classList.add('is-offline');
+                btn.title = 'Thông báo tạm thời không khả dụng';
+            }
+        }
+
+        async function markSeen() {
+            if (!lastUnread) return;
+            try {
+                var r = await fetch('/api/notifications/admin/seen', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                if (r.ok) { lastUnread = 0; badge.hidden = true; document.title = baseTitle; state.textContent = 'Đã xem hết'; }
+            } catch (e) { /* retried next time the panel opens */ }
+        }
+
+        function setOpen(open) {
+            panel.hidden = !open;
+            btn.setAttribute('aria-expanded', String(open));
+            if (open) markSeen();
+            else list.querySelectorAll('.is-unread').forEach(function (el) { el.classList.remove('is-unread'); });
+        }
+
+        btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(panel.hidden); });
+        document.addEventListener('click', function (e) { if (!panel.hidden && !root.contains(e.target)) setOpen(false); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) { setOpen(false); btn.focus(); } });
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+        timer = setInterval(load, 10000);
+        load();
+    })();
+</script>

@@ -20,6 +20,16 @@ public static class RabbitTopology
         RequestedConnectionTimeout = TimeSpan.FromSeconds(5)
     };
 
+    public static Task<IConnection> ConnectAsync(IConfiguration config, CancellationToken ct)
+    {
+        var factory = Factory(config);
+        var hosts = config.GetSection("RabbitMQ:Hosts").GetChildren()
+            .Select(item => item.Value).Where(value => !string.IsNullOrWhiteSpace(value)).Cast<string>().ToArray();
+        return hosts.Length == 0
+            ? factory.CreateConnectionAsync(ct)
+            : factory.CreateConnectionAsync(hosts, cancellationToken: ct);
+    }
+
     public static async Task DeclareAsync(IChannel channel, CancellationToken ct)
     {
         await channel.ExchangeDeclareAsync(Exchange, ExchangeType.Topic, durable: true, cancellationToken: ct);

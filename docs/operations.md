@@ -1,44 +1,52 @@
 # Vận hành
 
+Các phần bổ sung local: [metrics, load test, backup/restore và lab replication](local-distributed.md).
+
+Monitoring tùy chọn: xem [Prometheus/Grafana và runbook](monitoring.md). Overlay
+`compose.monitoring.yaml` chỉ bổ sung monitoring cho hybrid; không tự bật trên live.
+
 `scripts/Initialize-Environment.ps1` tạo các khóa/mật khẩu thiếu trong `.env`; không đổi mật khẩu tài khoản đã tồn tại. Không commit `.env` hoặc backup.
 
 | File | Vai trò |
 | --- | --- |
-| `compose.hybrid.yaml` | SQL Server/MongoDB/RabbitMQ và ứng dụng |
-| `compose.sqlexpress.yaml` | SQL Express trên Windows, giữ dữ liệu hiện có |
-| `compose.admin.yaml` | Cổng quản trị DB/broker chỉ trên loopback |
-| `compose.ha.yaml` | Hai replica, HAProxy public/private, bỏ public port trực tiếp của Kong |
-| `compose.yaml` | SQLite legacy; không áp dụng HA |
+| `compose.hybrid.yaml` | SQL Server/MongoDB/RabbitMQ và ứng dụng; một container mỗi service, một network |
+| `compose.admin.yaml` | Cổng quản trị DB/broker chỉ trên loopback (SQL `14333`, Mongo `27018`, RabbitMQ `15672`) |
+| `compose.monitoring.yaml` | Prometheus/blackbox/Grafana tùy chọn |
 
-Khởi động: `scripts/Start-Hybrid.ps1 -AdminPorts`. Với `SQL_DEPLOYMENT=sqlexpress`, script tự thêm override tương ứng. Website ở cổng 8080; backend chỉ mở trong mạng Docker. HAProxy cân bằng HTTP nội bộ qua cổng private 8101–8105, không publish chúng ra host.
+Stack SQLite cũ (`compose.yaml`, file `services/*/data/*.db`, công cụ chuyển SQLite) đã bỏ ngày 13/11/2026. Ngày 13/11/2026 đã đối chiếu từng bảng SQLite với SQL Server/MongoDB (đủ dữ liệu) rồi xoá các bản lưu SQLite.
+
+Không có load balancer/edge riêng (HAProxy/Nginx đã bỏ); mỗi service một container, Kong là điểm vào duy nhất.
+
+Khởi động: `scripts/Start-Hybrid.ps1 -AdminPorts` (thêm `-Monitoring` nếu cần). Kong là điểm vào duy nhất ở cổng 8080 (`HTTP_PORT`); backend chỉ mở trong mạng Docker và gọi nhau bằng `http://<service>:8080`.
 
 ## Trạng thái và dừng, giữ dữ liệu
 
 ```powershell
-$files = @('-f','compose.hybrid.yaml','-f','compose.admin.yaml','-f','compose.sqlexpress.yaml','-f','compose.ha.yaml')
+$files = @('-f','compose.hybrid.yaml','-f','compose.admin.yaml')
 .\scripts\Compose.ps1 @files ps
-.\scripts\Compose.ps1 @files logs --tail 50 booking notification kong edge
+.\scripts\Compose.ps1 @files logs --tail 50 booking notification gateway web-router
 .\scripts\Compose.ps1 @files stop
 ```
 
-Giữ nguyên tên project trong `.env`, volume, key ring và ảnh tour. Không dùng `down --volumes` trên stack đang dùng. Runtime không dùng SQL sa/Mongo admin.
+Dùng đúng bộ file đã khởi động. Giữ nguyên tên project trong `.env`, volume, key ring và ảnh tour. Không dùng `down --volumes` trên stack đang dùng. Runtime không dùng SQL sa/Mongo admin.
 
 ## Backup và triển khai
 
 Triển khai bình thường không chạy migration nhập dữ liệu, native-prune hoặc script xóa bảng.
 
 ```powershell
-dotnet run --project tools/HybridMigration/HybridMigration.csproj -- native-backup . backups/pre-deploy-TIMESTAMP
+.\scripts\Backup.ps1                                              # backup online -> backups\hybrid-<timestamp>
+.\scripts\Restore.ps1 -BackupDirectory backups\hybrid-<ts> -Drill # diễn tập khôi phục, không đụng live
 ```
 
-Backup dùng Windows Authentication, SQL COPY_ONLY + CHECKSUM và RESTORE VERIFYONLY. Đường dẫn `.bak` được ghi trong `sql-backup-receipt.json`; nếu ACL của SQL cho phép, file cũng được sao chép dưới `backups`. Không nới ACL chỉ để sao chép. Mongo dùng `mongodump --archive --gzip`, xác minh bằng `mongorestore --dryRun`; backup cả key ring/ảnh tour và giữ manifest SHA256, config, image rollback. Sao chép ra thiết bị khác: volume cùng máy không thay thế backup.
+Chi tiết, lịch tự động và khôi phục thật: [Sao lưu và phục hồi](backup-restore.md).
+Sao chép backup ra thiết bị khác: volume/ổ cùng máy không thay thế backup.
 
-`scripts/Deploy-HybridHA.ps1` dùng image đã build/test, tạo backup/rollback rồi cập nhật container, không xóa hoặc nhập lại database. Lần chuyển listener từ Kong sang HAProxy có gián đoạn ngắn. Rollout lỗi ứng dụng thì quay lại image/config trước; không tự restore dữ liệu đè lên database đang dùng.
+Cập nhật ứng dụng local: backup như trên, build/test image, rồi `.\scripts\Compose.ps1 @files up -d --no-deps <service>`; không xóa hoặc nhập lại database. Rollout lỗi thì quay lại image/config trước; không tự restore dữ liệu đè lên database đang dùng.
 
 ## Kết nối và kiểm tra lỗi
 
-- SSMS: `localhost\SQLEXPRESS`, Windows Authentication, `TourBookingDB`.
-- Khi bật AdminPorts: Mongo `localhost:27018`, RabbitMQ management `localhost:15672`. Credentials ở `.env`.
+- SSMS (SQL container, cần `compose.admin.yaml`): `127.0.0.1,14333`, SQL Server Authentication, tick *Trust server certificate*.- Khi bật AdminPorts: Mongo `localhost:27018`, RabbitMQ management `localhost:15672`. Credentials ở `.env`.
 - `/health/live`: process; `/health/ready`: dữ liệu cần để phục vụ. Notification readiness không phụ thuộc broker, consumer vẫn reconnect.
-- `X-Service-Node`/`X-Edge-Upstream` đối chiếu replica; `X-Correlation-ID` nối request và sự kiện.
+- `X-Service-Node` cho biết container trả lời; `X-Correlation-ID` nối request và sự kiện.
 - Chỉ thử dừng database/broker trong stack test riêng theo [hướng dẫn kiểm chứng](verification.md).

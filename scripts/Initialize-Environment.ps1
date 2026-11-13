@@ -40,7 +40,7 @@ if (-not (Select-String -LiteralPath $environmentPath -Pattern '^API_JWT_SIGNING
 }
 
 foreach ($name in @('IDENTITY_SQL_PASSWORD', 'CATALOG_SQL_PASSWORD', 'BOOKING_SQL_PASSWORD',
-    'CUSTOMER_SQL_PASSWORD', 'MONGO_ROOT_PASSWORD', 'MONGO_CHAT_PASSWORD', 'MONGO_NOTIFICATION_PASSWORD')) {
+    'CUSTOMER_SQL_PASSWORD', 'MONGO_ROOT_PASSWORD', 'MONGO_CHAT_PASSWORD', 'MONGO_NOTIFICATION_PASSWORD', 'GRAFANA_ADMIN_PASSWORD')) {
     if (-not (Select-String -LiteralPath $environmentPath -Pattern "^$name=.+" -Quiet)) {
         $randomBytes = New-Object byte[] 24
         $generator = [Security.Cryptography.RandomNumberGenerator]::Create()

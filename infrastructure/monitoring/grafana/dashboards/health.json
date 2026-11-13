@@ -1,0 +1,44 @@
+{
+  "uid": "tourbooking-health",
+  "title": "Tourbooking - replica health",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1, "title": "Ready replicas (discovered IPs)", "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "tourbooking-prometheus"},
+      "targets": [{"expr": "sum by (service) (probe_success{job=\"app-readiness\"})", "legendFormat": "{{service}}", "instant": true}],
+      "fieldConfig": {"defaults": {"min": 0, "decimals": 0}}
+    },
+    {
+      "id": 2, "title": "Live replicas (discovered IPs)", "type": "stat",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "tourbooking-prometheus"},
+      "targets": [{"expr": "sum by (service) (probe_success{job=\"app-liveness\"})", "legendFormat": "{{service}}", "instant": true}],
+      "fieldConfig": {"defaults": {"min": 0, "decimals": 0}}
+    },
+    {
+      "id": 3, "title": "Readiness per replica (1=ready, 0=failed)", "type": "timeseries",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "tourbooking-prometheus"},
+      "targets": [{"expr": "probe_success{job=\"app-readiness\"}", "legendFormat": "{{service}} / {{instance}}"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1}}
+    },
+    {
+      "id": 4, "title": "Health probe duration (not API request latency)", "type": "timeseries",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "tourbooking-prometheus"},
+      "targets": [{"expr": "probe_duration_seconds{job=\"app-readiness\"}", "legendFormat": "{{service}} / {{instance}}"}],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}}
+    },
+    {
+      "id": 5, "title": "Pending / firing alerts", "type": "table",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "tourbooking-prometheus"},
+      "targets": [{"expr": "ALERTS", "format": "table", "instant": true}]
+    }
+  ]
+}

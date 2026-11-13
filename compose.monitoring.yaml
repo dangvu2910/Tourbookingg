@@ -1,0 +1,46 @@
+# Optional overlay for compose.hybrid.yaml; no application/database mutations.
+services:
+  identity:
+    environment: { Metrics__Enabled: "true" }
+  catalog:
+    environment: { Metrics__Enabled: "true" }
+  booking:
+    environment: { Metrics__Enabled: "true" }
+  customer:
+    environment: { Metrics__Enabled: "true" }
+  notification:
+    environment: { Metrics__Enabled: "true" }
+  web-router:
+    environment: { Metrics__Enabled: "true" }
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - monitoring-prometheus:/prometheus
+    ports: ["127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"]
+    restart: unless-stopped
+  blackbox:
+    image: prom/blackbox-exporter:v0.26.0
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./infrastructure/monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana:11.6.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set a separate Grafana admin password}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Open the health dashboard on Home instead of the empty Grafana welcome page.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/health.json
+    ports: ["127.0.0.1:${GRAFANA_PORT:-3000}:3000"]
+    volumes:
+      - monitoring-grafana:/var/lib/grafana
+      - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    restart: unless-stopped
+volumes:
+  monitoring-prometheus:
+  monitoring-grafana:

@@ -1,0 +1,70 @@
+rule_files: [alerts.yml]
+evaluation_interval: 15s
+tests:
+  - interval: 15s
+    input_series:
+      - series: 'tourbooking_outbox_pending{job="app-metrics",service="booking",instance="a:8080"}'
+        values: '60+0x40'
+      - series: 'tourbooking_outbox_pending{job="app-metrics",service="booking",instance="b:8080"}'
+        values: '60+0x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: OutboxBacklogHigh
+        exp_alerts: []
+  - interval: 15s
+    input_series:
+      - series: 'tourbooking_outbox_pending{job="app-metrics",service="booking",instance="a:8080"}'
+        values: '120+0x40'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: OutboxBacklogHigh
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: OutboxBacklogHigh
+        exp_alerts:
+          - exp_labels: {service: booking, severity: warning}
+            exp_annotations:
+              summary: More than 100 unpublished events for booking
+  - interval: 15s
+    input_series:
+      - series: 'probe_success{job="app-readiness",service="booking",instance="test:8080"}'
+        values: '1 0+0x8'
+      - series: 'probe_success{job="app-liveness",service="booking",instance="test:8080"}'
+        values: '1+0x9'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: AppReadinessFailed
+        exp_alerts: []
+      - eval_time: 90s
+        alertname: AppReadinessFailed
+        exp_alerts:
+          - exp_labels: {job: app-readiness, service: booking, instance: "test:8080", severity: warning}
+            exp_annotations:
+              summary: Readiness failed for booking at test:8080
+              description: See docs/monitoring.md. Check dependency readiness and correlation logs.
+      - eval_time: 90s
+        alertname: AppProcessUnavailable
+        exp_alerts: []
+  - interval: 15s
+    input_series:
+      - series: 'probe_success{job="app-readiness",service="booking",instance="test:8080"}'
+        values: '1+0x8'
+    alert_rule_test:
+      - eval_time: 90s
+        alertname: ServiceDiscoveryMissing
+        exp_alerts:
+          - exp_labels: {job: app-readiness, service: identity, severity: critical}
+            exp_annotations:
+              summary: No readiness series for identity; check Docker DNS and replica count
+          - exp_labels: {job: app-readiness, service: catalog, severity: critical}
+            exp_annotations:
+              summary: No readiness series for catalog; check Docker DNS and replica count
+          - exp_labels: {job: app-readiness, service: customer, severity: critical}
+            exp_annotations:
+              summary: No readiness series for customer; check Docker DNS and replica count
+          - exp_labels: {job: app-readiness, service: notification, severity: critical}
+            exp_annotations:
+              summary: No readiness series for notification; check Docker DNS and replica count
+          - exp_labels: {job: app-readiness, service: web-router, severity: critical}
+            exp_annotations:
+              summary: No readiness series for web-router; check Docker DNS and replica count

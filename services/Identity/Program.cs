@@ -1,1 +1,2 @@
-await Tourbooking.Distributed.TourbookingHost.RunAsync(args, "identity");
+await Tourbooking.Distributed.TourbookingHost.RunAsync(
+    args, "identity", "Accounts", "Review");

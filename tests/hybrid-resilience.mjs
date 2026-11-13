@@ -7,7 +7,7 @@ const base = 'http://127.0.0.1:18083';
 if (process.env.TOURBOOKING_ISOLATED_TESTS !== '1') throw new Error('Explicit isolated-test opt-in required.');
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', timeout: 30000 }).trim();
 function nodes(service) {
-    assert.ok(['identity', 'catalog', 'booking', 'customer', 'notification', 'gateway', 'kong', 'rabbitmq', 'sqlserver', 'mongodb'].includes(service));
+    assert.ok(['identity', 'catalog', 'booking', 'customer', 'notification', 'web-router', 'gateway', 'rabbitmq', 'sqlserver', 'mongodb'].includes(service));
     const names = docker('ps', '-a', '--filter', `label=com.docker.compose.project=${project}`,
         '--filter', `label=com.docker.compose.service=${service}`, '--format', '{{.Names}}').split('\n').filter(Boolean);
     assert.ok(names.length, `Missing isolated ${service}`);
@@ -28,7 +28,7 @@ async function request(path, body, bearer) {
         cookies.set(pair.slice(0, index), pair.slice(index + 1));
     }
     return { status: response.status, text: await response.text(), location: response.headers.get('location'),
-        node: response.headers.get('x-service-node'), kong: response.headers.get('x-edge-upstream'),
+        node: response.headers.get('x-service-node'),
         ms: Math.round(performance.now() - started) };
 }
 const decode = value => value.replace(/&#x([a-f0-9]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
@@ -42,7 +42,7 @@ function fields(html) {
     return values;
 }
 const routes = [
-    ['home', '/', 'gateway', false, 200],
+    ['home', '/', 'web-router', false, 200],
     ['login', '/Account/Login', 'identity', false, 302],
     ['catalog', '/api/v1/catalog', 'catalog', true, 200],
     ['tours', '/Tours', 'catalog', false, 200],
@@ -54,7 +54,7 @@ const routes = [
 ];
 async function matrix(down) {
     return Promise.all(routes.map(async ([name, path, owner, direct, status]) => {
-        const unavailable = down === owner || down === 'kong' || down === 'gateway' && !direct
+        const unavailable = down === owner || down === 'gateway' || down === 'web-router' && !direct
             || down === 'sqlserver' && ['identity', 'catalog', 'booking', 'customer'].includes(owner)
             || down === 'mongodb' && ['customer', 'notification'].includes(owner);
         const expected = unavailable ? [502, 503, 504] : [status];
@@ -102,7 +102,11 @@ try {
     await eventually(async () => (await request('/api/v1/catalog')).status === 200, 'Hybrid stack startup', 150);
     email = `hybrid-resilience-${Date.now()}@example.test`;
     const password = 'Hybrid!Customer123';
-    const registration = await request('/Account/Register');
+    let registration;
+    await eventually(async () => {
+        registration = await request('/Account/Register');
+        return registration.status === 200;
+    }, 'Identity MVC route startup', 150);
     const registered = await request('/Account/Register', new URLSearchParams({ ...fields(registration.text),
         Email: email, Password: password, ConfirmPassword: password }));
     assert.equal(registered.status, 302);
@@ -112,20 +116,14 @@ try {
     assert.ok(token);
     report.scenarios.push({ name: 'baseline', checks: await expectMatrix(null) });
 
-    for (const [name, path] of [['gateway', '/'], ['identity', '/api/v1/auth/me'], ['catalog', '/api/v1/catalog'],
+    // One instance per service locally.
+    for (const [name, path] of [['web-router', '/'], ['identity', '/api/v1/auth/me'], ['catalog', '/api/v1/catalog'],
         ['booking', '/api/v1/bookings'], ['customer', '/api/v1/chat'], ['notification', '/api/v1/notifications']]) {
-        const instances = new Set(), kong = new Set();
-        for (let i = 0; i < 24; i++) {
-            const response = await request(path);
-            assert.equal(response.status, 200);
-            if (response.node) instances.add(response.node);
-            if (response.kong) kong.add(response.kong);
-        }
-        assert.equal(instances.size, 2, `${name} must distribute to two actual instances`);
-        assert.equal(kong.size, 2, 'Edge must distribute to two Kong instances');
-        report.distribution[name] = { nodes: [...instances], kong: [...kong] };
+        const response = await request(path);
+        assert.equal(response.status, 200, `${name} must answer through Kong`);
+        report.distribution[name] = { nodes: response.node ? [response.node] : [] };
     }
-    console.log('PASS actual round-robin distribution across backend, gateway and Kong replicas');
+    console.log('PASS every service answers through the single Kong entry');
 
     const bookingId = await book();
     const oldPage = await request(`/Home/Payment?bookingId=${bookingId}`);
@@ -138,18 +136,8 @@ try {
     assert.ok(!acknowledged.text.includes('alt="QR thanh toán"'));
     console.log('PASS SQL booking/payment acknowledgement after background update and duplicate submit');
 
-    for (const service of ['identity', 'catalog', 'booking', 'customer', 'notification', 'gateway', 'kong']) {
-        const replicas = nodes(service);
-        assert.equal(replicas.length, 2);
-        stop([replicas[0]]);
-        try {
-            const checks = await expectMatrix(null);
-            report.scenarios.push({ name: `one-${service}-down`, checks });
-            console.log(`PASS one ${service} replica stopped: all routes continue`);
-        } finally { start([replicas[0]]); }
-        await expectMatrix(null);
-    }
-    for (const service of ['catalog', 'booking', 'customer', 'notification', 'identity', 'gateway', 'kong', 'sqlserver', 'mongodb']) {
+    // Each service runs once: stopping it is a full outage. Dependent routes must fail fast, others keep working.
+    for (const service of ['catalog', 'booking', 'customer', 'notification', 'identity', 'web-router', 'gateway', 'sqlserver', 'mongodb']) {
         const replicas = nodes(service);
         stop(replicas);
         try {

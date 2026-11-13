@@ -1,0 +1,76 @@
+groups:
+  - name: tourbooking-health
+    rules:
+      - alert: OutboxBacklogHigh
+        expr: max by (service) (tourbooking_outbox_pending{job="app-metrics"}) > 100
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'More than 100 unpublished events for {{ $labels.service }}'
+      - alert: OutboxObservationFailed
+        expr: tourbooking_outbox_observation_success{job="app-metrics"} == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Local outbox observation failed for {{ $labels.service }}'
+      - alert: RabbitQueueBacklogHigh
+        expr: sum(rabbitmq_queue_messages_ready{job="rabbitmq"}) > 100
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'RabbitMQ ready-message backlog exceeds 100'
+      - alert: RabbitMetricsUnavailable
+        expr: up{job="rabbitmq"} == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: 'RabbitMQ metrics unavailable for {{ $labels.broker }}'
+      - alert: ApplicationErrorRateHigh
+        expr: sum by (service) (rate(http_requests_received_total{job="app-metrics",code="5xx"}[5m])) / clamp_min(sum by (service) (rate(http_requests_received_total{job="app-metrics"}[5m])), 0.001) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'HTTP 5xx exceeds 5 percent for {{ $labels.service }}'
+      - alert: ApplicationLatencyHigh
+        expr: histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket{job="app-metrics"}[5m]))) > 2
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'HTTP p95 exceeds two seconds for {{ $labels.service }}'
+      - alert: ApplicationMetricsUnavailable
+        expr: up{job="app-metrics"} == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Metrics unavailable for {{ $labels.service }} at {{ $labels.instance }}'
+      - alert: ServiceDiscoveryMissing
+        expr: absent(probe_success{job="app-readiness",service="identity"}) or absent(probe_success{job="app-readiness",service="catalog"}) or absent(probe_success{job="app-readiness",service="booking"}) or absent(probe_success{job="app-readiness",service="customer"}) or absent(probe_success{job="app-readiness",service="notification"}) or absent(probe_success{job="app-readiness",service="web-router"})
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 'No readiness series for {{ $labels.service }}; check Docker DNS and replica count'
+      - alert: AppReadinessFailed
+        expr: probe_success{job="app-readiness"} == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Readiness failed for {{ $labels.service }} at {{ $labels.instance }}'
+          description: 'See docs/monitoring.md. Check dependency readiness and correlation logs.'
+      - alert: AppProcessUnavailable
+        expr: probe_success{job="app-liveness"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Liveness failed for {{ $labels.service }} at {{ $labels.instance }}'
+      - alert: ProbeScrapeFailed
+        expr: up{job=~"app-readiness|app-liveness"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Health probe exporter could not be scraped'
+      - alert: HealthProbeSlow
+        expr: probe_duration_seconds{job="app-readiness"} > 2
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Readiness probe exceeds two seconds for {{ $labels.service }}'

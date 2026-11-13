@@ -97,6 +97,8 @@ builder.Services.AddApiBearer(builder.Configuration, service == "identity" ? asy
     foreach (var role in await users.GetRolesAsync(user)) identity.AddClaim(new(System.Security.Claims.ClaimTypes.Role, role));
 } : null);
 builder.Services.AddSingleton(TimeProvider.System);
+if (builder.Configuration.GetValue("Metrics:Enabled", false) && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
+    builder.Services.AddHostedService<OutboxMetrics>();
 builder.Services.AddSingleton<ProjectionRefreshCoordinator>();
 builder.Services.AddHttpClient<Tourbooking.Contracts.ISeatReservationClient, HttpSeatReservationClient>(client => client.Timeout = TimeSpan.FromSeconds(5));
 if (service is "catalog" && builder.Configuration.GetValue("Reservations:Enabled", false))
@@ -168,6 +170,8 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler(handler => handler.Run(async context =>
     {
         context.Response.StatusCode = 500;
+        // Without an explicit charset browsers decode the Vietnamese message as Latin-1.
+        context.Response.ContentType = "text/plain; charset=utf-8";
         await context.Response.WriteAsync("Không thể xử lý yêu cầu. Vui lòng thử lại.");
     }));
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
@@ -175,8 +179,18 @@ if (!app.Environment.IsDevelopment())
 }
 
 if (builder.Configuration.GetValue("Https:Redirect", true)) app.UseHttpsRedirection();
+// Views emit /assets/{service}/... so web-router can pick the owning service and strip the prefix.
+// When a service is opened directly (debug port), strip its own prefix here so CSS/JS still load.
+var ownAssetPrefix = new PathString("/assets/" + service);
+app.Use((context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments(ownAssetPrefix, StringComparison.OrdinalIgnoreCase, out var assetPath))
+        context.Request.Path = assetPath;
+    return next(context);
+});
 app.UseStaticFiles();
 app.UseRouting();
+app.UseServiceMetrics();
 
 app.UseAuthentication();
 app.UseRateLimiter();

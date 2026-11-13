@@ -1,0 +1,191 @@
+:root {
+  --bookings-bg: #f6f2ee;
+  --bookings-card: #ffffff;
+  --bookings-ink: #1f1b16;
+  --bookings-muted: #6b625b;
+  --bookings-primary: #0b4fd9;
+  --bookings-border: #e7dfd8;
+  --bookings-shadow: 0 24px 40px rgba(15, 23, 42, 0.08);
+}
+
+.bookings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.bookings-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bookings-tab {
+  border: 1px solid var(--bookings-border);
+  background: #fff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  color: var(--bookings-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.bookings-tab:hover {
+  color: var(--bookings-ink);
+}
+
+.bookings-tab.active {
+  background: var(--bookings-primary);
+  color: #fff;
+  border-color: var(--bookings-primary);
+}
+
+.booking-list {
+  display: grid;
+  gap: 16px;
+}
+
+.booking-item {
+  background: var(--bookings-card);
+  border-radius: 18px;
+  border: 1px solid var(--bookings-border);
+  box-shadow: var(--bookings-shadow);
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.booking-thumb {
+  width: 140px;
+  height: 90px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #efe9e2;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: var(--bookings-muted);
+}
+
+.booking-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.booking-info h4 {
+  margin: 0 0 6px;
+}
+
+.booking-info p {
+  margin: 0;
+  color: var(--bookings-muted);
+  font-size: 13px;
+}
+
+.booking-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--bookings-muted);
+  font-size: 13px;
+}
+
+.booking-price {
+  text-align: right;
+}
+
+.booking-price strong {
+  display: block;
+  font-size: 18px;
+}
+
+.booking-note {
+  margin: 8px 0 0;
+  color: var(--bookings-muted);
+  font-size: 12px;
+}
+
+.booking-action {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bookings-border);
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.booking-action-toggle {
+  margin-top: 12px;
+}
+
+.booking-action-toggle summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.booking-action-toggle summary::-webkit-details-marker {
+  display: none;
+}
+
+.booking-action-label {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  max-width: 280px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bookings-muted);
+}
+
+.booking-action .form-control {
+  border: 1px solid var(--bookings-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.status-pill.pending {
+  background: rgba(247, 169, 36, 0.18);
+  color: #a76600;
+}
+
+.status-pill.confirmed {
+  background: rgba(22, 163, 74, 0.15);
+  color: #0f7a36;
+}
+
+.status-pill.cancelled {
+  background: rgba(220, 38, 38, 0.15);
+  color: #b91c1c;
+}
+
+@media (max-width: 992px) {
+  .booking-item {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .booking-price {
+    text-align: left;
+  }
+}

@@ -1,0 +1,67 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+rule_files: [/etc/prometheus/alerts.yml]
+scrape_configs:
+  - job_name: rabbitmq
+    dns_sd_configs:
+      - names: [rabbitmq-a, rabbitmq-b, rabbitmq-c]
+        type: A
+        port: 15692
+        refresh_interval: 15s
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: broker
+  - job_name: app-metrics
+    dns_sd_configs:
+      - names: [identity, catalog, booking, customer, notification, web-router]
+        type: A
+        port: 8080
+        refresh_interval: 15s
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: service
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+  # DNS discovers individual replicas rather than probing the load balancer.
+  - job_name: app-readiness
+    metrics_path: /probe
+    params:
+      module: [http_health]
+    dns_sd_configs:
+      - names: [identity, catalog, booking, customer, notification, web-router]
+        type: A
+        port: 8080
+        refresh_interval: 15s
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: service
+      - source_labels: [__address__]
+        regex: (.*)
+        replacement: http://${1}/health/ready
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: app-liveness
+    metrics_path: /probe
+    params:
+      module: [http_health]
+    dns_sd_configs:
+      - names: [identity, catalog, booking, customer, notification, web-router]
+        type: A
+        port: 8080
+        refresh_interval: 15s
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: service
+      - source_labels: [__address__]
+        regex: (.*)
+        replacement: http://${1}/health/live
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

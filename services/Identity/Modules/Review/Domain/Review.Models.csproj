@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../../services/Identity/Modules/Accounts/Domain/Identity.Models.csproj" />
+    <ProjectReference Include="../../../../../services/Catalog/Modules/Tours/Domain/Catalog.Models.csproj" />
+    <ProjectReference Include="../../../../../services/Booking/Modules/Booking/Domain/Booking.Models.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

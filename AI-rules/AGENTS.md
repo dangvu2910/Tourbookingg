@@ -17,10 +17,12 @@ Tài liệu dành cho coding agent và thành viên dự án đặt tour. Có th
 
 | Service | Dữ liệu sở hữu | DB mặc định |
 | --- | --- | --- |
-| Identity | Tài khoản, thông tin xác thực, vai trò | IdentityDB trên SQL Server |
-| Catalog | Tour, danh mục, lịch khởi hành, giá, số chỗ | CatalogDB trên SQL Server |
-| Booking | Đơn đặt tour, thanh toán, đánh giá | BookingDB trên SQL Server |
-| Customer/Chat | Hội thoại, tin nhắn | MongoDB riêng hoặc SQLite riêng theo cấu hình dự án |
+| Identity | Tài khoản, thông tin xác thực, vai trò; đánh giá tour (module Review) | IdentityDB trên SQL Server |
+| Catalog | Tour, danh mục, lịch khởi hành, giá, số chỗ; báo cáo chỉ đọc (module Reporting) | CatalogDB trên SQL Server |
+| Booking | Đơn đặt tour, thanh toán | BookingDB trên SQL Server |
+| Customer/Chat | Liên hệ, hội thoại, tin nhắn | MongoDB riêng hoặc SQLite riêng theo cấu hình dự án |
+
+Cấu trúc thư mục bắt buộc cho mỗi backend: xem mục "Cấu trúc thư mục service" trong `docs/architecture.md`.
 | Notification | Thông báo, trạng thái gửi | MongoDB riêng hoặc SQLite riêng theo cấu hình dự án |
 
 Chỉ service sở hữu dữ liệu được tạo bảng, migration, đọc và ghi trực tiếp dữ liệu đó. Những tên DB và bảng trong tài liệu là quy ước đề xuất, không phải bằng chứng về code hiện có.
@@ -180,7 +182,7 @@ Catalog:
 5. Khởi động service rồi gateway; kiểm tra luồng API và sự kiện.
 6. Kiểm tra dữ liệu còn sau khi tạo lại container mà không xóa volume; thao tác này chỉ thực hiện trên môi trường test.
 
-Các lệnh mẫu, chạy tại thư mục có compose.yaml sau khi đã cấu hình môi trường:
+Các lệnh mẫu (thêm `-f compose.hybrid.yaml`), chạy tại thư mục gốc repo sau khi đã cấu hình môi trường:
 
 ```bash
 # Kiểm tra cấu hình mà không in toàn bộ giá trị đã resolve ra log
@@ -234,3 +236,8 @@ Trước khi sửa code, đọc AGENTS.md theo phạm vi thư mục, xác địn
 - Compose service configuration và health dependencies: https://docs.docker.com/reference/compose-file/services/
 
 Các quy định sở hữu dữ liệu là quyết định kiến trúc cho dự án này. Các ví dụ là hướng dẫn, chưa được build hoặc chạy với repository thực tế vì chưa có source dự án trong yêu cầu.
+# Project instructions
+
+Read and follow `AI-rules/AGENTS.md` and `AI-rules/api-guidelines.md` before changing this repository. Preserve existing databases and the legacy MVC routes. The SQL Server/MongoDB stack uses `compose.hybrid.yaml`; The old SQLite stack (`compose.yaml`) was removed on 2026-11-13 after every row was verified in SQL Server/MongoDB (SQLite archives deleted); back up with `scripts/Backup.ps1` before risky data work.
+
+Locally each service runs as one container on one Compose network with Kong as the only entry. There is no cloud deployment target (AWS plans were dropped on 2026-11-13); do not introduce Docker Swarm or cloud infrastructure unless asked.

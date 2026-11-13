@@ -1,0 +1,68 @@
+# TEST ONLY: merge hybrid + verification + replication-test + this file (via scripts/Test-Hybrid.ps1 -Cluster).
+x-broker: &broker
+  RabbitMQ__Hosts__0: rabbitmq-a
+  RabbitMQ__Hosts__1: rabbitmq-b
+  RabbitMQ__Hosts__2: rabbitmq-c
+services:
+  mongodb:
+    profiles: [single-store]
+  rabbitmq:
+    profiles: [single-store]
+  rabbit-cluster-ready:
+    image: rabbitmq:4.1-management
+    entrypoint: [bash, /cluster-ready.sh]
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_COOKIE:?Required}
+      RABBITMQ_CTL_ERL_ARGS: "+S 2:2"
+    volumes: ["./infrastructure/rabbitmq/cluster-ready.sh:/cluster-ready.sh:ro"]
+    depends_on:
+      rabbitmq-a: { condition: service_healthy }
+      rabbitmq-b: { condition: service_healthy }
+      rabbitmq-c: { condition: service_healthy }
+  mongo-app-init:
+    image: mongo:8.0.17
+    entrypoint: [mongosh, --quiet, --host, mongodb-a, --file, /app-users.js]
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Required}
+      MONGO_CHAT_PASSWORD: ${MONGO_CHAT_PASSWORD:?Required}
+      MONGO_NOTIFICATION_PASSWORD: ${MONGO_NOTIFICATION_PASSWORD:?Required}
+    volumes: ["./infrastructure/mongo/app-users.js:/app-users.js:ro"]
+    depends_on:
+      mongodb-a: { condition: service_healthy }
+      mongodb-b: { condition: service_healthy }
+      mongodb-c: { condition: service_healthy }
+  identity:
+    environment: *broker
+    depends_on:
+      rabbit-cluster-ready: { condition: service_completed_successfully }
+  catalog:
+    environment: *broker
+    depends_on:
+      rabbit-cluster-ready: { condition: service_completed_successfully }
+  booking:
+    environment: *broker
+    depends_on:
+      rabbit-cluster-ready: { condition: service_completed_successfully }
+  customer:
+    environment:
+      <<: *broker
+      Chat__ConnectionString: mongodb://chat_app:${MONGO_CHAT_PASSWORD}@mongodb-a:27017,mongodb-b:27017,mongodb-c:27017/ChatDB?replicaSet=tourbooking-rs&w=majority
+    depends_on: !override
+      customer-init: { condition: service_completed_successfully }
+      mongo-app-init: { condition: service_completed_successfully }
+      rabbit-cluster-ready: { condition: service_completed_successfully }
+  notification:
+    environment:
+      <<: *broker
+      MongoDB__ConnectionString: mongodb://notification_app:${MONGO_NOTIFICATION_PASSWORD}@mongodb-a:27017,mongodb-b:27017,mongodb-c:27017/NotificationDB?replicaSet=tourbooking-rs&w=majority
+    depends_on: !override
+      mongo-app-init: { condition: service_completed_successfully }
+      rabbit-cluster-ready: { condition: service_completed_successfully }
+      rabbitmq-a: { condition: service_healthy }
+      rabbitmq-b: { condition: service_healthy }
+      rabbitmq-c: { condition: service_healthy }
+  tests:
+    environment:
+      RABBITMQ_HOST: rabbitmq-a
+      TEST_CHAT_MONGO: mongodb://chat_app:${MONGO_CHAT_PASSWORD}@mongodb-a:27017,mongodb-b:27017,mongodb-c:27017/ChatDB?replicaSet=tourbooking-rs&w=majority
+      TEST_NOTIFICATION_MONGO: mongodb://notification_app:${MONGO_NOTIFICATION_PASSWORD}@mongodb-a:27017,mongodb-b:27017,mongodb-c:27017/NotificationDB?replicaSet=tourbooking-rs&w=majority

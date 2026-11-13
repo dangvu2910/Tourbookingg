@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../services/Catalog/Reservations/Infrastructure/Catalog.Reservations.Infrastructure.csproj" />
-    <ProjectReference Include="../../services/customer/Chat/Chat.csproj" />
+    <ProjectReference Include="../../services/Catalog/Modules/Reservations/Infrastructure/Catalog.Reservations.Infrastructure.csproj" />
+    <ProjectReference Include="../../services/Customer/Modules/Support/Infrastructure/Chat/Chat.csproj" />
     <ProjectReference Include="../Persistence/Tourbooking.Persistence.csproj" />
     <ProjectReference Include="../Routing/Tourbooking.Routing.csproj" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />

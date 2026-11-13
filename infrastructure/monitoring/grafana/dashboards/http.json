@@ -1,0 +1,32 @@
+{
+  "uid": "tourbooking-http", "title": "Tourbooking - HTTP and process", "schemaVersion": 39,
+  "version": 1, "refresh": "15s", "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {"id": 1, "title": "Requests per second", "type": "timeseries", "gridPos": {"x": 0,"y": 0,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "targets": [{"expr": "sum by (service) (rate(http_requests_received_total{job=\"app-metrics\"}[5m]))", "legendFormat": "{{service}}"}]},
+    {"id": 2, "title": "HTTP status rates", "type": "timeseries", "gridPos": {"x": 12,"y": 0,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "targets": [{"expr": "sum by (service, code) (rate(http_requests_received_total{job=\"app-metrics\"}[5m]))", "legendFormat": "{{service}} {{code}}"}]},
+    {"id": 3, "title": "HTTP latency p50 p95 p99", "type": "timeseries", "gridPos": {"x": 0,"y": 8,"w": 24,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "fieldConfig": {"defaults": {"unit": "s"}},
+     "targets": [
+       {"expr": "histogram_quantile(0.50, sum by (service, le) (rate(http_request_duration_seconds_bucket{job=\"app-metrics\"}[5m])))", "legendFormat": "{{service}} p50"},
+       {"expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket{job=\"app-metrics\"}[5m])))", "legendFormat": "{{service}} p95"},
+       {"expr": "histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket{job=\"app-metrics\"}[5m])))", "legendFormat": "{{service}} p99"}]},
+    {"id": 4, "title": "Process working set", "type": "timeseries", "gridPos": {"x": 0,"y": 16,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "fieldConfig": {"defaults": {"unit": "bytes"}},
+     "targets": [{"expr": "process_working_set_bytes{job=\"app-metrics\"}", "legendFormat": "{{service}} {{instance}}"}]},
+    {"id": 5, "title": "Process CPU cores used", "type": "timeseries", "gridPos": {"x": 12,"y": 16,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "targets": [{"expr": "rate(process_cpu_seconds_total{job=\"app-metrics\"}[5m])", "legendFormat": "{{service}} {{instance}}"}]},
+    {"id": 6, "title": "SQL outbox backlog (max across replicas)", "type": "timeseries", "gridPos": {"x": 0,"y": 24,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "targets": [{"expr": "max by (service) (tourbooking_outbox_pending{job=\"app-metrics\"})", "legendFormat": "{{service}}"}]},
+    {"id": 7, "title": "RabbitMQ ready messages by node (cluster profile)", "type": "timeseries", "gridPos": {"x": 12,"y": 24,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "targets": [{"expr": "rabbitmq_queue_messages_ready{job=\"rabbitmq\"}", "legendFormat": "{{broker}}"}]}
+  ]
+}
