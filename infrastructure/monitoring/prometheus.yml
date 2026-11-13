@@ -24,6 +24,10 @@ scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: [localhost:9090]
+  # Log pipeline health (Loki has no Docker healthcheck): up{job="logging"} == 0 means logs are not being collected.
+  - job_name: logging
+    static_configs:
+      - targets: [loki:3100, alloy:12345]
   # DNS discovers individual replicas rather than probing the load balancer.
   - job_name: app-readiness
     metrics_path: /probe

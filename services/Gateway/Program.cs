@@ -61,6 +61,7 @@ var clusters = ServiceBoundary.Services.Select((service, index) => new ClusterCo
 builder.Services.AddReverseProxy().LoadFromMemory(routes, clusters);
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient();
+builder.Services.AddServiceResilience();
 var app = builder.Build();
 app.Use(async (context, next) =>
 {

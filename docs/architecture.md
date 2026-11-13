@@ -70,3 +70,15 @@ Luồng bất đồng bộ, không gọi chéo service khi khách đặt tour:
 4. Mở chuông gọi `POST /api/notifications/admin/seen` (cần header `X-Requested-With`), lưu thời điểm đã xem theo từng admin ở `NotificationDB.admin_seen`.
 
 Chỉ báo các việc admin cần xử lý: đơn mới (`booking.created`), khách đã gửi thanh toán (`booking.updated` trạng thái `Processing`) và yêu cầu hỗ trợ mới (`contact.created`); logic ở `AdminFeed`. Notification service tắt thì chuông mờ đi, trang admin và việc đặt tour vẫn chạy; sự kiện chờ trong RabbitMQ và hiện ra khi service lên lại. Độ trễ tối đa khoảng 15 giây (outbox ~1–5 giây + chu kỳ hỏi 10 giây).
+
+## Circuit breaker giữa các service (chương 8)
+
+Mọi lời gọi HTTP giữa các service đi qua `IHttpClientFactory` đều có pipeline resilience. Pipeline được đăng ký trong `Shared/Routing/ServiceResilience.cs`, dùng `Microsoft.Extensions.Http.Resilience`/Polly, và mỗi service đích (`identity:8080`, `catalog:8080`, ...) có pipeline riêng. Các lớp, từ ngoài vào trong:
+
+1. **Retry**: tối đa 2 lần, backoff có jitter, **chỉ cho GET/HEAD**. Lệnh giữ chỗ và thanh toán là POST nên không bao giờ bị client gửi lại; chúng dựa vào `RequestId`.
+2. **Circuit breaker**: mạch mở khi ≥50% của tối thiểu 4 lời gọi trong 30 giây bị lỗi. Lỗi được tính là 5xx, 408, 429, lỗi mạng hoặc timeout. Mạch mở thì trong 15 giây mọi lời gọi tới service đó lỗi ngay, không chờ timeout. Sau đó một lời gọi thử được cho đi (half-open); thành công thì mạch đóng.
+3. **Timeout**: 3 giây cho mỗi lần thử.
+
+Khi mạch mở, lỗi được đổi thành `HttpRequestException` để mọi chỗ gọi giữ nguyên cách dự phòng như trước (dùng projection đã cache, trả 503/504, giữ phiên đăng nhập). Trạng thái mạch có trong metric `tourbooking_http_circuit_state{target}` và `tourbooking_http_circuit_opened_total`, và trong log `Circuit OPEN/HALF-OPEN/CLOSED`.
+
+Đã kiểm chứng trên `tourbooking-live` ngày 13/11/2026: dừng identity thì `/Tours` chậm 3,2 giây ở request đầu, sau đó mạch mở và các request tiếp theo chỉ còn 16–90 ms (vẫn 200, dùng cache). Bật lại identity thì mạch chuyển HALF-OPEN rồi CLOSED.

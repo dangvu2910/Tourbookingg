@@ -19,7 +19,7 @@ services:
       - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infrastructure/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - monitoring-prometheus:/prometheus
-    ports: ["127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"]
+    ports: ["[::1]:${PROMETHEUS_PORT:-9090}:9090"]
     restart: unless-stopped
   blackbox:
     image: prom/blackbox-exporter:v0.26.0
@@ -35,12 +35,37 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       # Open the health dashboard on Home instead of the empty Grafana welcome page.
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/health.json
-    ports: ["127.0.0.1:${GRAFANA_PORT:-3000}:3000"]
+    ports: ["[::1]:${GRAFANA_PORT:-3000}:3000"]
     volumes:
       - monitoring-grafana:/var/lib/grafana
       - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     restart: unless-stopped
+  # Log management: Alloy tails this project's container logs and pushes them to Loki; view them in Grafana > Explore.
+  loki:
+    image: grafana/loki:3.6.21
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./infrastructure/monitoring/loki.yml:/etc/loki/loki.yml:ro
+      - monitoring-loki:/loki
+    # Distroless image (no shell/wget): no Docker healthcheck; Prometheus scrapes loki:3100/metrics instead.
+    restart: unless-stopped
+  alloy:
+    image: grafana/alloy:v1.21.3
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    environment:
+      COMPOSE_PROJECT: ${HYBRID_PROJECT_NAME:-tourbooking-hybrid}
+    # Alloy UI (pipeline graph and component health): http://localhost:12345
+    ports: ["[::1]:${ALLOY_PORT:-12345}:12345"]
+    volumes:
+      - ./infrastructure/monitoring/alloy.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - monitoring-alloy:/var/lib/alloy/data
+    depends_on:
+      loki: { condition: service_started }
+    restart: unless-stopped
 volumes:
   monitoring-prometheus:
   monitoring-grafana:
+  monitoring-loki:
+  monitoring-alloy:

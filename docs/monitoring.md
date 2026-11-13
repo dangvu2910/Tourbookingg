@@ -81,3 +81,15 @@ và backlog NaN, không giả thành không có sự kiện chờ. Profile clust
 exporter và dashboard queue messages theo node. Chưa có host disk/restart hoặc
 database connections/failover metrics; chưa hoàn thành monitoring production và
 chưa thay đổi plugin/database live.
+
+## Log tập trung (Loki)
+
+`compose.monitoring.yaml` có thêm `loki` (Grafana Loki 3.6) và `alloy` (Grafana Alloy). Alloy đọc stdout/stderr của mọi container trong project qua Docker socket (read-only) rồi đẩy sang Loki. Log được giữ 7 ngày trong volume `monitoring-loki`.
+
+- Các service .NET ghi log JSON, mỗi bản ghi một dòng, kèm scope `CorrelationId`. Alloy gắn nhãn `service`, `container`, `project` và `level`.
+- Xem log trong Grafana: **Explore → Loki**, hoặc bảng "Logs: warnings and errors" trên dashboard *Tourbooking - HTTP and process*.
+- Ví dụ truy vấn:
+  - `{service="booking"} | json | LogLevel="Error"`: lỗi của booking.
+  - `{project="tourbooking-live"} |= "<X-Correlation-ID>"`: một request đi qua những service nào. Lấy mã từ header `X-Correlation-ID` của response.
+  - `{service=~".+"} |= "Circuit OPEN"`: các lần circuit breaker mở.
+- Prometheus job `logging` theo dõi `loki:3100` và `alloy:12345`. `up{job="logging"} == 0` nghĩa là log không còn được thu thập. Image Loki là distroless nên không có Docker healthcheck.

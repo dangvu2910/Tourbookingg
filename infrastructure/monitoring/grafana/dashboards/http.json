@@ -27,6 +27,17 @@
      "targets": [{"expr": "max by (service) (tourbooking_outbox_pending{job=\"app-metrics\"})", "legendFormat": "{{service}}"}]},
     {"id": 7, "title": "RabbitMQ ready messages by node (cluster profile)", "type": "timeseries", "gridPos": {"x": 12,"y": 24,"w": 12,"h": 8},
      "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
-     "targets": [{"expr": "rabbitmq_queue_messages_ready{job=\"rabbitmq\"}", "legendFormat": "{{broker}}"}]}
+     "targets": [{"expr": "rabbitmq_queue_messages_ready{job=\"rabbitmq\"}", "legendFormat": "{{broker}}"}]},
+    {"id": 8, "title": "Circuit breaker state (0 closed, 0.5 half-open, 1 open)", "type": "timeseries", "gridPos": {"x": 0,"y": 32,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "fieldConfig": {"defaults": {"min": 0, "max": 1, "custom": {"lineInterpolation": "stepAfter"}}, "overrides": []},
+     "targets": [{"expr": "max by (service, target) (tourbooking_http_circuit_state{job=\"app-metrics\"})", "legendFormat": "{{service}} -> {{target}}"}]},
+    {"id": 9, "title": "Circuit opened (last 1h)", "type": "stat", "gridPos": {"x": 12,"y": 32,"w": 12,"h": 8},
+     "datasource": {"type": "prometheus","uid": "tourbooking-prometheus"},
+     "targets": [{"expr": "sum by (service, target) (increase(tourbooking_http_circuit_opened_total{job=\"app-metrics\"}[1h]))", "legendFormat": "{{service}} -> {{target}}"}]},
+    {"id": 10, "title": "Logs: warnings and errors (Loki)", "type": "logs", "gridPos": {"x": 0,"y": 40,"w": 24,"h": 12},
+     "datasource": {"type": "loki","uid": "tourbooking-loki"},
+     "options": {"showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true},
+     "targets": [{"expr": "{level=~\"Warning|Error|Critical\"} | json | line_format \"{{.service}} | {{.Category}} | {{.Message}}\"", "refId": "A"}]}
   ]
 }

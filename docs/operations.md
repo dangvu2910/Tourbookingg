@@ -46,7 +46,8 @@ Cập nhật ứng dụng local: backup như trên, build/test image, rồi `.\s
 
 ## Kết nối và kiểm tra lỗi
 
-- SSMS (SQL container, cần `compose.admin.yaml`): `127.0.0.1,14333`, SQL Server Authentication, tick *Trust server certificate*.- Khi bật AdminPorts: Mongo `localhost:27018`, RabbitMQ management `localhost:15672`. Credentials ở `.env`.
+- SSMS (cần `compose.admin.yaml`): `127.0.0.1,14333`, SQL Server Authentication, tick *Trust server certificate*.
+- Khi bật AdminPorts: Mongo `localhost:27018` (Compass), RabbitMQ management `localhost:15672`. Credentials ở `.env`. Cổng SQL/Mongo không mở bằng trình duyệt được.
 - `/health/live`: process; `/health/ready`: dữ liệu cần để phục vụ. Notification readiness không phụ thuộc broker, consumer vẫn reconnect.
 - `X-Service-Node` cho biết container trả lời; `X-Correlation-ID` nối request và sự kiện.
 - Chỉ thử dừng database/broker trong stack test riêng theo [hướng dẫn kiểm chứng](verification.md).

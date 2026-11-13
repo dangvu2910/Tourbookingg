@@ -19,17 +19,15 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = ar
 builder.Configuration["Service:Name"] = service;
 
 // Add services to the container.
-var dataDirectory = builder.Configuration["Database:Directory"] ?? Path.Combine(builder.Environment.ContentRootPath, "data");
-Directory.CreateDirectory(dataDirectory);
-var databaseName = builder.Configuration["Database:Name"] ?? service;
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-{
-    if (builder.Configuration["Database:Provider"] == "SqlServer")
-        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("SQL Server connection is required."));
-    else
-        options.UseSqlite($"Data Source={Path.Combine(dataDirectory, databaseName + ".db")};Foreign Keys=False;Default Timeout=30");
-});
+// SQL Server is the only data store. Fail fast instead of silently creating an empty local database
+// when the service is started outside the Compose stack (e.g. plain `dotnet run`).
+if (builder.Configuration["Database:Provider"] != "SqlServer")
+    throw new InvalidOperationException(
+        $"Service '{service}': Database:Provider must be 'SqlServer'. Start the stack with scripts/Start-Hybrid.ps1 " +
+        "and open it through Kong (http://localhost:8080); running a single service with `dotnet run` is not supported.");
+var sqlConnection = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException($"Service '{service}': ConnectionStrings:DefaultConnection is required.");
+builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(sqlConnection));
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
         options.Password.RequiredLength = 6;
@@ -81,6 +79,7 @@ foreach (var assemblyName in controllerAssemblies)
 builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.Routing.IUrlHelperFactory, ServiceUrlHelperFactory>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("sql", tags: ["ready"]);
 builder.Services.AddHttpClient();
+builder.Services.AddServiceResilience();
 builder.Services.AddRequestRateLimits();
 builder.Services.AddApiBearer(builder.Configuration, service == "identity" ? async context =>
 {
@@ -108,17 +107,17 @@ if (service is "catalog" && builder.Configuration.GetValue("Reservations:Enabled
 }
 if (service is "booking" && builder.Configuration.GetValue("Reservations:Enabled", false))
     builder.Services.AddHostedService<BookingSeatReconciler>();
-if (service is "customer" or "support" or "standalone")
+// The *-init containers only run SQL migrations and exit; they need no chat store.
+if (service is "customer" or "support" or "standalone" && !builder.Configuration.GetValue("Database:InitializeOnly", false))
 {
-    if (builder.Configuration["Chat:Provider"] == "MongoDB")
-    {
-        builder.Services.AddSingleton<Tourbooking.Chat.MongoChatStore>();
-        builder.Services.AddSingleton<Tourbooking.Chat.IChatStore>(sp => sp.GetRequiredService<Tourbooking.Chat.MongoChatStore>());
-        builder.Services.AddHealthChecks().AddCheck<Tourbooking.Chat.ChatMongoHealthCheck>("chat-mongo", tags: ["ready"]);
-        if (builder.Configuration.GetValue("RabbitMQ:Enabled", false))
-            builder.Services.AddHostedService<Tourbooking.Chat.ChatOutboxDispatcher>();
-    }
-    else builder.Services.AddScoped<Tourbooking.Chat.IChatStore, Tourbooking.Chat.SqliteChatStore>();
+    // Live contact/chat data is in MongoDB ChatDB; the SQL tables are empty, so never fall back to them.
+    if (builder.Configuration["Chat:Provider"] != "MongoDB")
+        throw new InvalidOperationException($"Service '{service}': Chat:Provider must be 'MongoDB' (ChatDB). Start the stack with scripts/Start-Hybrid.ps1.");
+    builder.Services.AddSingleton<Tourbooking.Chat.MongoChatStore>();
+    builder.Services.AddSingleton<Tourbooking.Chat.IChatStore>(sp => sp.GetRequiredService<Tourbooking.Chat.MongoChatStore>());
+    builder.Services.AddHealthChecks().AddCheck<Tourbooking.Chat.ChatMongoHealthCheck>("chat-mongo", tags: ["ready"]);
+    if (builder.Configuration.GetValue("RabbitMQ:Enabled", false))
+        builder.Services.AddHostedService<Tourbooking.Chat.ChatOutboxDispatcher>();
 }
 if ((service is "booking" or "payment" or "support" or "identity" or "catalog" or "review" or "standalone") && builder.Configuration.GetValue("RabbitMQ:Enabled", false))
     builder.Services.AddHostedService<OutboxDispatcher>();

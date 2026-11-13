@@ -6,16 +6,13 @@ using Tourbooking.Notifications;
 using Tourbooking.Distributed;
 
 var builder = WebApplication.CreateBuilder(args);
-var dataDirectory = builder.Configuration["Database:Directory"] ?? Path.Combine(builder.Environment.ContentRootPath, "data");
-Directory.CreateDirectory(dataDirectory);
-if (builder.Configuration["Database:Provider"] == "MongoDB")
-    builder.Services.AddSingleton<INotificationStore, MongoNotificationStore>();
-else
-{
-    builder.Services.AddDbContext<NotificationDb>(options => options.UseSqlite(
-        $"Data Source={Path.Combine(dataDirectory, "notification.db")};Default Timeout=30"));
-    builder.Services.AddScoped<INotificationStore>(sp => sp.GetRequiredService<NotificationDb>());
-}
+// MongoDB NotificationDB is the only store at runtime (NotificationDb/SQLite is kept for tests only).
+// Fail fast instead of silently creating an empty local database when started outside the Compose stack.
+if (builder.Configuration["Database:Provider"] != "MongoDB")
+    throw new InvalidOperationException(
+        "Notification: Database:Provider must be 'MongoDB'. Start the stack with scripts/Start-Hybrid.ps1 " +
+        "and open it through Kong (http://localhost:8080); running a single service with `dotnet run` is not supported.");
+builder.Services.AddSingleton<INotificationStore, MongoNotificationStore>();
 builder.Services.AddDataProtection().SetApplicationName("Tourbooking.SharedAuth")
     .PersistKeysToFileSystem(new DirectoryInfo(builder.Configuration["DataProtection:KeysPath"] ?? ".keys"));
 builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme).AddCookie(IdentityConstants.ApplicationScheme, options =>
@@ -28,6 +25,7 @@ builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme).AddCooki
 });
 builder.Services.AddAuthorization();
 builder.Services.AddHttpClient();
+builder.Services.AddServiceResilience();
 builder.Services.AddApiBearer(builder.Configuration);
 builder.Services.AddSingleton<ConsumerState>();
 builder.Services.AddHostedService<NotificationConsumer>();

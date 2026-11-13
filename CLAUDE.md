@@ -31,13 +31,15 @@ docker compose -p tourbooking-live -f compose.hybrid.yaml config --quiet
 ```
 
 - The site is reachable only through Kong at http://localhost:8080. App services publish no host ports.
+- Each published port has exactly one loopback binding. Kong (8080), Grafana (3000), Prometheus (9090), Alloy UI (12345) and RabbitMQ management (15672) bind `[::1]` only, because Windows resolves `localhost` to `::1` first and an IPv4-only binding made each new connection wait about 200 ms. Use `http://localhost:<port>`; `127.0.0.1` is not bound for these. SQL Server (`127.0.0.1,14333`) and MongoDB (`127.0.0.1:27018`) stay on IPv4 for SSMS and Compass. RabbitMQ AMQP 5672 is not published.
 - `compose.admin.yaml` (loaded by `-AdminPorts`) binds these to loopback only:
-  - SQL Server: `127.0.0.1,14333`
-  - MongoDB: `27018`
-  - RabbitMQ: `5672` / `15672`
+  - SQL Server: `127.0.0.1,14333` (SSMS)
+  - MongoDB: `27018` (Compass)
+  - RabbitMQ management: `15672`
+- These are database protocols, not web pages: opening them in a browser shows `ERR_EMPTY_RESPONSE`. Docker Desktop always lists published ports and cannot hide them.
 - All SQL data lives in the SQL Server container. The Windows SQL Express setup was removed on 2026-11-13; its last `TourBookingDB` backup is in `backups/sqlexpress-final-*`.
 - `Register-BackupTask.ps1` has registered the Windows scheduled task "Tourbooking Hybrid Backup", which runs `Backup.ps1` daily at 02:00 and keeps 14 days of backups.
-- Rebuild one service with `docker compose -p tourbooking-live -f compose.hybrid.yaml up -d --build <svc>`. For identity, catalog, booking and customer, the image is built by the matching `<svc>-init` service, which also runs the migration.
+- Rebuild one service with `docker compose -p tourbooking-live -f compose.hybrid.yaml up -d --build <svc>`. For identity, catalog, booking and customer, the image is built by the matching `<svc>-init` service, which also runs the migration. `Start-Hybrid.ps1` removes the exited one-shot containers (`sql-provision`, `*-init`) once the stack is healthy. Any later `up` recreates and re-runs them; they are idempotent.
 
 ## Architecture
 
@@ -98,9 +100,35 @@ There are five backends. Each backend hosts several logical modules:
 - Delivery is at-least-once, so consumers must be idempotent. `NotificationConsumer` uses EventId as the Mongo `_id` and has retry and a DLQ.
 - The admin bell polls `GET /api/notifications/admin/summary`. The feed filter is in `services/Notification/.../Application/AdminFeed.cs`.
 
+### Resilience and logs
+
+- Every `IHttpClientFactory` client in every service gets `AddServiceResilience()` from `Shared/Routing/ServiceResilience.cs`. Pipelines are selected per target authority. From the outside in:
+  1. a retry for GET/HEAD only
+  2. a circuit breaker
+  3. a 3 s attempt timeout
+- Polly rejections are rethrown as `HttpRequestException`, so callers keep their existing fallbacks.
+- Never enable retries for POST commands such as reservations or payments.
+- Apps log JSON lines (`Logging__Console__FormatterName=json`) with a `CorrelationId` scope from `ApiContractMiddleware`.
+- Alloy ships container logs to Loki. Both are in `compose.monitoring.yaml`, and the logs are visible in Grafana Explore.
+
 ### Notification tests
 
-Notification also has an EF/SQLite `NotificationDb` implementation of `INotificationStore`. It is used by the tests. Keep it in sync with `MongoNotificationStore`.
+Notification also has an EF/SQLite `NotificationDb` implementation of `INotificationStore`. It is used by the tests only. Keep it in sync with `MongoNotificationStore`.
+
+### Running a single service
+
+Services fail fast at startup unless they get the stack's configuration:
+- `TourbookingHost` requires `Database:Provider=SqlServer`.
+- customer requires `Chat:Provider=MongoDB`, except in `*-init` runs.
+- Notification requires `Database:Provider=MongoDB`.
+
+So a plain `dotnet run` of one service exits with an explanatory error instead of silently creating an empty SQLite database. This is deliberate and should not be "fixed". A lone service cannot reach the other services (`http://<svc>:8080` only resolves inside Docker) and serves only its own pages. To iterate on one service, rebuild it inside the stack and test through Kong:
+
+```powershell
+docker compose -p tourbooking-live -f compose.hybrid.yaml -f compose.admin.yaml up -d --build <svc>-init <svc>
+```
+
+For notification and web-router, use just `<svc>`; they have no init service.
 
 ## Operational rules
 

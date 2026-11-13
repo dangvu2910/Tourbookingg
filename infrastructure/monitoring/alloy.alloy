@@ -1,0 +1,53 @@
+// Grafana Alloy: tails the stdout/stderr of this Compose project's containers and ships them to Loki.
+// Only containers of the project named in COMPOSE_PROJECT are collected (Docker socket mounted read-only).
+
+discovery.docker "project" {
+  host = "unix:///var/run/docker.sock"
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=" + sys.env("COMPOSE_PROJECT")]
+  }
+}
+
+discovery.relabel "project" {
+  targets = []
+
+  // service = Compose service name (identity, catalog, booking, ...); container = e.g. tourbooking-live-booking-1.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+}
+
+loki.source.docker "project" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.project.targets
+  relabel_rules = discovery.relabel.project.rules
+  forward_to    = [loki.process.app.receiver]
+}
+
+// .NET services log one JSON object per line: promote the level to a label for fast filtering.
+loki.process "app" {
+  stage.json {
+    expressions = { level = "LogLevel" }
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

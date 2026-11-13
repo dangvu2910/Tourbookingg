@@ -25,6 +25,11 @@ x-env: &env
   Services__notification: http://notification:8080
   Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
   Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+  # One JSON object per log line (with scopes such as CorrelationId) so Loki/Grafana can parse and filter logs.
+  Logging__Console__FormatterName: json
+  Logging__Console__FormatterOptions__IncludeScopes: "true"
+  Logging__Console__FormatterOptions__TimestampFormat: "yyyy-MM-ddTHH:mm:ss.fffK"
+  Logging__Console__FormatterOptions__UseUtcTimestamp: "true"
 
 x-app: &app
   restart: unless-stopped
@@ -213,6 +218,10 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: tourbooking
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+      Logging__Console__FormatterName: json
+      Logging__Console__FormatterOptions__IncludeScopes: "true"
+      Logging__Console__FormatterOptions__TimestampFormat: "yyyy-MM-ddTHH:mm:ss.fffK"
+      Logging__Console__FormatterOptions__UseUtcTimestamp: "true"
     depends_on:
       mongodb: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
@@ -239,7 +248,9 @@ services:
       KONG_PROXY_ERROR_LOG: /dev/stderr
     volumes: ["./infrastructure/kong/kong.hybrid.yml:/etc/kong/kong.yml:ro"]
     # Single public entry; no extra edge/LB container.
-    ports: ["127.0.0.1:${HTTP_PORT:-8080}:8000"]
+    # Single loopback binding on ::1: Windows resolves "localhost" to ::1 first (an IPv4-only 127.0.0.1 binding
+    # made every new connection wait ~200 ms). Open http://localhost:8080; 127.0.0.1 is not bound.
+    ports: ["[::1]:${HTTP_PORT:-8080}:8000"]
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 10s

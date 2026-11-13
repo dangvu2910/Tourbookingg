@@ -17,6 +17,9 @@ public sealed class ApiContractMiddleware(RequestDelegate next, ILogger<ApiContr
         context.Items["CorrelationId"] = correlation;
         Activity.Current?.SetTag("correlation.id", correlation);
         context.Response.Headers["X-Correlation-ID"] = correlation;
+        // Every log line written while handling this request carries CorrelationId (JSON console formatter
+        // with IncludeScopes), so Loki can follow one request across services: {...} | json | CorrelationId="...".
+        using var scope = logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlation });
         if (!context.Request.Path.StartsWithSegments("/api/v1")) { await next(context); return; }
         var original = context.Response.Body;
         await using var buffer = new MemoryStream();

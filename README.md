@@ -16,7 +16,7 @@ Yêu cầu Docker Desktop Linux containers, .NET SDK 10.
 
 Kong là điểm vào **http://localhost:8080** (đổi bằng `HTTP_PORT`). Các service gọi nhau trực tiếp bằng tên Docker (`http://catalog:8080`...).
 
-SQL: với `-AdminPorts`, SSMS kết nối `127.0.0.1,14333`, SQL Server Authentication (`sa`/`SQL_PASSWORD` hoặc tài khoản `<service>_app`), tick *Trust server certificate*; database `IdentityDB`, `CatalogDB`, `BookingDB`, `CustomerDB`. MongoDB ở `localhost:27018`, RabbitMQ management ở `localhost:15672`. Mật khẩu nằm trong `.env`, được gitignore. Không xóa database/volume để cập nhật ứng dụng.
+SQL: với `-AdminPorts`, SSMS kết nối `127.0.0.1,14333`, SQL Server Authentication (`sa`/`SQL_PASSWORD` hoặc tài khoản `<service>_app`), tick *Trust server certificate*; database `IdentityDB`, `CatalogDB`, `BookingDB`, `CustomerDB`. MongoDB Compass: `mongodb://localhost:27018`. RabbitMQ management ở `localhost:15672`. Cổng SQL/Mongo không mở được bằng trình duyệt. Mật khẩu nằm trong `.env`, được gitignore. Không xóa database/volume để cập nhật ứng dụng.
 
 ## Kiểm tra
 
